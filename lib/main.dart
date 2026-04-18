@@ -1,3 +1,4 @@
+import 'theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/firebase_options.dart';
@@ -44,10 +45,10 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DashboardViewModel()),
       ],
       child: MaterialApp(
-        title: 'C0 App',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        ),
+        title: 'C0 Calorie Counter',
+        theme: C0Theme.lightTheme, // Daylight logic
+        darkTheme: C0Theme.darkTheme, // Nighttime logic
+        themeMode: ThemeMode.system,
         home: const Wrapper(),
       ),
     );

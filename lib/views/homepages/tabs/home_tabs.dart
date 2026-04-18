@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cal0appv2/views/debug/debug_view.dart';
 import 'package:cal0appv2/viewmodels/theme_viewmodel.dart';
 
 class HomeTab extends StatelessWidget {
@@ -17,6 +18,16 @@ class HomeTab extends StatelessWidget {
       appBar: AppBar(
         title: Text('Home', style: TextStyle(color: c.textPrimary)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bug_report),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const DebugView()),
+              );
+            },
+          ),
+
           IconButton(
             icon: Icon(
               themeVm.isDark ? Icons.light_mode : Icons.dark_mode,

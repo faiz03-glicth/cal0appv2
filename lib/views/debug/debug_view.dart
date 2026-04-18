@@ -44,7 +44,7 @@ class _DebugViewState extends State<DebugView> {
                     style: const TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 12,
-                      color: Colors.black87,
+                      color: Color.fromARGB(221, 228, 3, 3),
                     ),
                   ),
                   onLongPress: () {

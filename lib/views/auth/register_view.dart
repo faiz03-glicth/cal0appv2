@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cal0appv2/viewModels/viewauth/register_viewmodel.dart';
+import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
+import 'package:cal0appv2/viewModels/viewauth/register_viewmodel.dart';
 
 class RegisterView extends StatefulWidget {
   const RegisterView({super.key});
@@ -75,12 +76,13 @@ class _RegisterViewState extends State<RegisterView> {
   @override
   Widget build(BuildContext context) {
     final vm = Provider.of<RegisterViewModel>(context);
+    final c = C0Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Create Account'),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
+        backgroundColor: c.header,
+        foregroundColor: c.textPrimary,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -161,11 +163,11 @@ class _RegisterViewState extends State<RegisterView> {
               // Birthday
               const SizedBox(height: 4),
               ListTile(
-                tileColor: Colors.white,
+                tileColor: C0Theme.deepSage.withOpacity(0.1),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                leading: const Icon(Icons.cake, color: Colors.deepPurple),
+                leading: Icon(Icons.cake, color: c.primary),
                 title: const Text('Birthday'),
                 subtitle: Text(
                   '${_birthday.day}/${_birthday.month}/${_birthday.year}',
@@ -207,17 +209,22 @@ class _RegisterViewState extends State<RegisterView> {
                 height: 50,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
+                    backgroundColor: C0Theme.oatmealWhite,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                   onPressed: vm.isLoading ? null : () => _register(vm),
                   child: vm.isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
+                      ? const CircularProgressIndicator(
+                          color: C0Theme.oatmealWhite,
+                        )
                       : const Text(
                           'Create Account',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
+                          style: TextStyle(
+                            color: C0Theme.charcoal,
+                            fontSize: 16,
+                          ),
                         ),
                 ),
               ),
@@ -229,7 +236,7 @@ class _RegisterViewState extends State<RegisterView> {
                   onPressed: () => Navigator.pop(context),
                   child: const Text(
                     'Already have an account? Login',
-                    style: TextStyle(color: Colors.deepPurple),
+                    style: TextStyle(color: C0Theme.mintyFresh),
                   ),
                 ),
               ),

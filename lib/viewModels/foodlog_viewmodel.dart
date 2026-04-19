@@ -76,11 +76,14 @@ class FoodLogViewModel extends ChangeNotifier {
 
   // ── Select food from search results → populate form fields ────────────────
   void selectFood(Map<String, dynamic> food) {
-    foodName = food['name'] ?? food['food_name'] ?? '';
-    calories = (food['calories'] ?? food['energy'] ?? 0).toString();
-    protein = (food['protein'] ?? 0).toDouble();
-    carbs = (food['carbs'] ?? food['carbohydrates'] ?? 0).toDouble();
-    fat = (food['fat'] ?? 0).toDouble();
+    foodName = food['name'] ?? food['food_name'] ?? food['naman'] ?? '';
+    calories = (food['calories'] ?? food['energy'] ?? food['kalori'] ?? 0)
+        .toString();
+    protein = (food['protein'] ?? food['proteins'] ?? food['protein'] ?? 0)
+        .toDouble();
+    carbs = (food['carbs'] ?? food['carbohydrates'] ?? food['karbohidrat'] ?? 0)
+        .toDouble();
+    fat = (food['fat'] ?? food['cabr'] ?? food['lemak'] ?? 0).toDouble();
     manualMode = true;
     _searchResults = [];
     notifyListeners();

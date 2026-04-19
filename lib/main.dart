@@ -1,11 +1,14 @@
 import 'theme/app_theme.dart';
+import 'services/secure_config.dart';
 import 'package:flutter/material.dart';
 import 'services/firebase_options.dart';
 import 'package:provider/provider.dart';
 import 'viewModels/wrapper/wrapper.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'viewModels/viewauth/auth_viewmodel.dart';
-import 'viewModels/usermodel/user_viewmodel.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'viewModels/usermodel/user_viewmodel.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'viewModels/dashboard/dashboard_viewmodel.dart';
 import 'package:cal0appv2/viewmodels/theme_viewmodel.dart';
 import 'package:cal0appv2/viewModels/foodlog_viewmodel.dart';
@@ -14,15 +17,18 @@ import 'package:cal0appv2/viewModels/viewauth/register_viewmodel.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: 'crypt.env');
+  await SecureConfig.init();
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: 10485760,
+  );
+  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    LogService.error("FLUTTER ERROR: ${details.exception}");
-    if (details.stack != null) {
-      LogService.error("STACK TRACE: ${details.stack}");
-    }
+    LogService.error('FLUTTER ERROR: ${details.exception}');
   };
-  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await Firebase.initializeApp();
+  //debugPrint("Firebase Initialized");
   LogService.info("Binding Initialized");
   try {
     await Firebase.initializeApp(
@@ -32,6 +38,7 @@ void main() async {
   } catch (e) {
     LogService.info("Firebase Error: $e");
   }
+  await Firebase.initializeApp();
 
   runApp(
     MultiProvider(

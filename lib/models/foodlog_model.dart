@@ -1,41 +1,62 @@
 class FoodLogModel {
-  String _foodLogName, _calorieIntake;
+  String _foodLogName, _calorieIntake, _foodLogID, _userId;
+  double _protein, _carbs, _fats;
   DateTime _foodLogDate;
-  int _foodLogID;
 
   FoodLogModel({
-    required int foodLogID,
+    required String foodLogID,
+    required String userId,
     required String foodLogName,
     required String calorieIntake,
     required DateTime foodLogDate,
+    required double protein,
+    required double carbs,
+    required double fats,
   }) : _foodLogID = foodLogID,
+       _userId = userId,
        _foodLogName = foodLogName,
        _calorieIntake = calorieIntake,
-       _foodLogDate = foodLogDate;
+       _foodLogDate = foodLogDate,
+       _protein = protein,
+       _carbs = carbs,
+       _fats = fats;
 
   // Getters
-  int get foodLogID => _foodLogID;
+  String get foodLogID => _foodLogID;
+  String get userId => _userId;
   String get foodLogName => _foodLogName;
   String get calorieIntake => _calorieIntake;
   DateTime get foodLogDate => _foodLogDate;
+  double get protein => _protein;
+  double get carbs => _carbs;
+  double get fats => _fats;
 
   // Setters
-  set foodLogID(int value) => _foodLogID = value;
+  set foodLogID(String value) => _foodLogID = value;
+  set userId(String value) => _userId = value;
   set foodLogName(String value) => _foodLogName = value;
   set calorieIntake(String value) => _calorieIntake = value;
   set foodLogDate(DateTime value) => _foodLogDate = value;
 
   factory FoodLogModel.fromMap(Map<String, dynamic> map) => FoodLogModel(
     foodLogID: map['foodLogID'],
+    userId: map['userId'],
     foodLogName: map['foodLogName'],
     calorieIntake: map['calorieIntake'],
     foodLogDate: DateTime.parse(map['foodLogDate']),
+    protein: map['protein']?.toDouble() ?? 0,
+    carbs: map['carbs']?.toDouble() ?? 0,
+    fats: map['fats']?.toDouble() ?? 0,
   );
 
   Map<String, dynamic> toMap() => {
     'foodLogID': _foodLogID,
+    'userId': _userId,
     'foodLogName': _foodLogName,
     'calorieIntake': _calorieIntake,
     'foodLogDate': _foodLogDate.toIso8601String(),
+    'protein': _protein,
+    'carbs': _carbs,
+    'fats': _fats,
   };
 }

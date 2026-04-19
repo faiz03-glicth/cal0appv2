@@ -2,24 +2,41 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class NutritionService {
-  final String _apiKey = 'YOUR_RAPIDAPI_KEY_HERE'; // Put your key here
-  final String _apiHost =
-      'calorieninjas.p.rapidapi.com'; // Or the specific host for your Calorie-API
+  static const String _apiKey =
+      'kal_c906da3cf23128d4f6d0d98aa37e96281d273fbe6ca2fe70b5f22c4c12a83c28'; // Put your key here
+  static const String _apiHost = 'https://api.kaloriapi.com/v1';
 
-  Future<Map<String, dynamic>> getNutritionData(String query) async {
-    final url = Uri.parse(
-      'https://calorieninjas.p.rapidapi.com/v1/nutrition?query=$query',
-    );
+  static const Map<String, String> _headers = {
+    'Authorization': 'Bearer $_apiKey',
+    'Content-Type': 'application/json',
+  };
 
-    final response = await http.get(
-      url,
-      headers: {'X-RapidAPI-Key': _apiKey, 'X-RapidAPI-Host': _apiHost},
-    );
+  Future<List<Map<String, dynamic>>> searchFood(String query) async {
+    try {
+      final uri = Uri.parse('$_apiHost/foods/search?q=$query');
+      final res = await http.get(uri, headers: _headers);
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        return List<Map<String, dynamic>>.from(
+          data['foods'] ?? data['data'] ?? [],
+        );
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
 
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Failed to fetch nutrition data: ${response.statusCode}');
+  Future<Map<String, dynamic>?> getFoodById(String id) async {
+    try {
+      final uri = Uri.parse('$_apiHost/foods/$id');
+      final res = await http.get(uri, headers: _headers);
+      if (res.statusCode == 200) {
+        return json.decode(res.body);
+      }
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 }

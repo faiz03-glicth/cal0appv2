@@ -1,13 +1,14 @@
 import 'theme/app_theme.dart';
 import 'package:flutter/material.dart';
-import 'package:cal0appv2/viewmodels/theme_viewmodel.dart';
 import 'services/firebase_options.dart';
 import 'package:provider/provider.dart';
 import 'viewModels/wrapper/wrapper.dart';
 import 'viewModels/viewauth/auth_viewmodel.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'viewModels/usermodel/user_viewmodel.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'viewModels/dashboard/dashboard_viewmodel.dart';
+import 'package:cal0appv2/viewmodels/theme_viewmodel.dart';
+import 'package:cal0appv2/viewModels/foodlog_viewmodel.dart';
 import 'package:cal0appv2/services/logs/debuglog_services.dart';
 import 'package:cal0appv2/viewModels/viewauth/register_viewmodel.dart';
 
@@ -39,6 +40,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => RegisterViewModel()),
         ChangeNotifierProvider(create: (_) => UserViewModel()),
         ChangeNotifierProvider(create: (_) => DashboardViewModel()),
+        ChangeNotifierProvider(create: (_) => FoodLogViewModel()),
         ChangeNotifierProvider(create: (_) => ThemeViewModel()),
       ],
       child: const MyApp(),

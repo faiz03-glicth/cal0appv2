@@ -9,9 +9,9 @@ class FoodLogModel {
     required String foodLogName,
     required String calorieIntake,
     required DateTime foodLogDate,
-    required double protein,
-    required double carbs,
-    required double fats,
+    double protein = 0,
+    double carbs = 0,
+    double fats = 0,
   }) : _foodLogID = foodLogID,
        _userId = userId,
        _foodLogName = foodLogName,
@@ -37,6 +37,9 @@ class FoodLogModel {
   set foodLogName(String value) => _foodLogName = value;
   set calorieIntake(String value) => _calorieIntake = value;
   set foodLogDate(DateTime value) => _foodLogDate = value;
+  set protein(double value) => _protein = value;
+  set carbs(double value) => _carbs = value;
+  set fats(double value) => _fats = value;
 
   factory FoodLogModel.fromMap(Map<String, dynamic> map) => FoodLogModel(
     foodLogID: map['foodLogID'],

@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:cal0appv2/models/foodlog_model.dart';
-import 'package:cal0appv2/viewModels/dashboard/dashboard_viewmodel.dart';
+import 'package:cal0appv2/viewModels/foodlog_viewmodel.dart';
+import 'package:cal0appv2/views/homepages/widgets/food_sheet.dart';
 
 class FoodDiary extends StatelessWidget {
-  final List<dynamic> foodLogs;
-  final VoidCallback onAdd;
-
-  const FoodDiary({super.key, required this.foodLogs, required this.onAdd});
+  const FoodDiary({super.key});
 
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
-    final vm = Provider.of<DashboardViewModel>(context);
+    final vm = Provider.of<FoodLogViewModel>(context);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -45,7 +43,7 @@ class FoodDiary extends StatelessWidget {
                 ),
               ),
               TextButton.icon(
-                onPressed: () => _showAddFoodSheet(context, vm, c),
+                onPressed: () => _openAddSheet(context),
                 icon: Icon(Icons.add, size: 16, color: c.primary),
                 label: Text(
                   'Add',
@@ -82,7 +80,7 @@ class FoodDiary extends StatelessWidget {
               ? _buildEmpty(c)
               : Column(
                   children: vm.foodLogs
-                      .map<Widget>((log) => _buildItem(context, log, c))
+                      .map<Widget>((log) => _buildItem(context, log, vm, c))
                       .toList(),
                 ),
         ],
@@ -90,24 +88,10 @@ class FoodDiary extends StatelessWidget {
     );
   }
 
-  // ── Add food bottom sheet ─────────────────────────────────────────────────
-  void _showAddFoodSheet(
-    BuildContext context,
-    DashboardViewModel vm,
-    C0Colors c,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _AddFoodSheet(vm: vm),
-    );
-  }
-
   Widget _buildItem(
     BuildContext context,
-    dynamic log,
-    DashboardViewModel vm,
+    FoodLogModel log,
+    FoodLogViewModel vm,
     C0Colors c,
   ) {
     return Container(
@@ -142,7 +126,7 @@ class FoodDiary extends StatelessWidget {
                 Text(
                   'P: ${log.protein.toStringAsFixed(1)}g  '
                   'C: ${log.carbs.toStringAsFixed(1)}g  '
-                  'F: ${log.fat.toStringAsFixed(1)}g',
+                  'F: ${log.fats.toStringAsFixed(1)}g',
                   style: TextStyle(fontSize: 11, color: c.textSecondary),
                 ),
               ],
@@ -156,25 +140,118 @@ class FoodDiary extends StatelessWidget {
               fontSize: 13,
             ),
           ),
+          const SizedBox(width: 4),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: c.textSecondary, size: 18),
+            color: c.card,
+            onSelected: (val) {
+              if (val == 'edit') {
+                vm.prefillForEdit(log);
+                _openEditSheet(context, log);
+              } else if (val == 'delete') {
+                _confirmDelete(context, log, vm, c);
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit, size: 16, color: c.primary),
+                    const SizedBox(width: 8),
+                    Text('Edit', style: TextStyle(color: c.textPrimary)),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, size: 16, color: c.warning),
+                    const SizedBox(width: 8),
+                    Text('Delete', style: TextStyle(color: c.warning)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildEmpty(C0Colors c) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20),
-      child: Center(
-        child: Column(
-          children: [
-            Icon(Icons.no_food, size: 40, color: c.textSecondary),
-            const SizedBox(height: 8),
-            Text(
-              'No food logged today',
-              style: TextStyle(color: c.textSecondary, fontSize: 13),
-            ),
-          ],
+  Widget _buildEmpty(C0Colors c) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 20),
+    child: Center(
+      child: Column(
+        children: [
+          Icon(Icons.no_food, size: 40, color: c.textSecondary),
+          const SizedBox(height: 8),
+          Text(
+            'No food logged today',
+            style: TextStyle(color: c.textSecondary, fontSize: 13),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  void _openAddSheet(BuildContext context) {
+    Provider.of<FoodLogViewModel>(context, listen: false).clearForm();
+    _openSheet(context, isEdit: false);
+  }
+
+  void _openEditSheet(BuildContext context, FoodLogModel log) {
+    _openSheet(context, isEdit: true, existing: log);
+  }
+
+  void _openSheet(
+    BuildContext context, {
+    required bool isEdit,
+    FoodLogModel? existing,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: Provider.of<FoodLogViewModel>(context, listen: false),
+        child: FoodSheet(isEdit: isEdit, existing: existing),
+      ),
+    );
+  }
+
+  void _confirmDelete(
+    BuildContext context,
+    FoodLogModel log,
+    FoodLogViewModel vm,
+    C0Colors c,
+  ) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: c.card,
+        title: Text('Delete food?', style: TextStyle(color: c.textPrimary)),
+        content: Text(
+          'Remove "${log.foodLogName}" from your diary?',
+          style: TextStyle(color: c.textSecondary),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              vm.deleteFoodLog(log.foodLogID);
+            },
+            child: Text(
+              'Delete',
+              style: TextStyle(color: c.warning, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
       ),
     );
   }

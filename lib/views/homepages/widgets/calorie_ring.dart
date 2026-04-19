@@ -4,8 +4,8 @@ import 'package:cal0appv2/theme/app_theme.dart';
 
 class CalorieRing extends StatelessWidget {
   final int totalCalories;
-  final double target;
-  final double burned;
+  final int target;
+  final int burned;
 
   const CalorieRing({
     super.key,

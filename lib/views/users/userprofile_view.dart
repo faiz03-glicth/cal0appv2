@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cal0appv2/views/homepages/widgets/c0_app_bar.dart';
 import 'package:cal0appv2/viewModels/usermodel/user_viewmodel.dart';
 // 👆 removed unused ThemeViewModel import
 
@@ -74,7 +75,7 @@ class _UserProfileViewState extends State<UserProfileView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(vm.successMessage!),
-          backgroundColor: C0Theme.successGreen, // 👈 use theme color
+          backgroundColor: C0Theme.successGreen,
         ),
       );
     }
@@ -96,11 +97,7 @@ class _UserProfileViewState extends State<UserProfileView> {
     final c = C0Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('My Profile', style: TextStyle(color: c.textPrimary)),
-        backgroundColor: c.header,
-        foregroundColor: c.textPrimary,
-      ),
+      appBar: C0AppBar(title: 'My Profile', showBack: false),
       backgroundColor: c.background,
       body: vm.isLoading
           ? Center(child: CircularProgressIndicator(color: c.primary))
@@ -189,13 +186,13 @@ class _UserProfileViewState extends State<UserProfileView> {
                       ),
                       leading: Icon(Icons.cake, color: c.primary),
                       title: Text(
-                        'Birthday', // 👈 add style
+                        'Birthday',
                         style: TextStyle(color: c.textPrimary),
                       ),
                       subtitle: Text(
                         '${_birthday.day}/${_birthday.month}/${_birthday.year}',
                         style: TextStyle(color: c.textSecondary),
-                      ), // 👈 add style
+                      ),
                       onTap: _pickBirthday,
                     ),
                     const SizedBox(height: 12),
@@ -250,8 +247,8 @@ class _UserProfileViewState extends State<UserProfileView> {
                       width: double.infinity,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: c.primary), // 👈 theme border
-                          foregroundColor: c.primary, // 👈 theme text
+                          side: BorderSide(color: c.primary),
+                          foregroundColor: c.primary,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -338,13 +335,13 @@ class _UserProfileViewState extends State<UserProfileView> {
       obscureText: obscure,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
       validator: validator,
-      style: TextStyle(color: c.textPrimary, fontSize: 15), // 👈 text color
+      style: TextStyle(color: c.textPrimary, fontSize: 15),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: c.textSecondary), // 👈 label color
-        prefixIcon: Icon(icon, color: c.primary), // 👈 was c.textPrimary
+        labelStyle: TextStyle(color: c.textSecondary),
+        prefixIcon: Icon(icon, color: c.primary),
         filled: true,
-        fillColor: c.card, // 👈 was c.textSecondary (wrong!)
+        fillColor: c.card,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,
@@ -368,7 +365,7 @@ class _UserProfileViewState extends State<UserProfileView> {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: c.warning, width: 1),
         ),
-        errorMaxLines: 2, // 👈 prevents overflow
+        errorMaxLines: 2,
       ),
     ),
   );
@@ -383,14 +380,14 @@ class _UserProfileViewState extends State<UserProfileView> {
     padding: const EdgeInsets.only(bottom: 12),
     child: DropdownButtonFormField<String>(
       value: value,
-      dropdownColor: c.card, // 👈 dropdown bg
+      dropdownColor: c.card,
       style: TextStyle(color: c.textPrimary, fontSize: 15),
       icon: Icon(Icons.keyboard_arrow_down, color: c.primary),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: c.textSecondary),
         filled: true,
-        fillColor: c.card, // 👈 was correct
+        fillColor: c.card,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,

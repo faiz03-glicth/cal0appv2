@@ -41,10 +41,10 @@ class _DebugViewState extends State<DebugView> {
                   title: SelectableText(
                     // Allows highlighting specific words
                     logEntry,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 12,
-                      color: Color.fromARGB(221, 228, 3, 3),
+                      color: Color.fromARGB(255, 220, 220, 220),
                     ),
                   ),
                   onLongPress: () {

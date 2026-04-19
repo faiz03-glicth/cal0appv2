@@ -12,34 +12,40 @@ class DateStrip extends StatelessWidget {
     final dayLabels = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
     return Container(
-      color: c.header,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      color: c.card,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: days.map((d) {
-          final isToday = d.day == now.day;
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: days.map<Widget>((d) {
+          final isToday =
+              d.day == now.day && d.month == now.month && d.year == now.year;
+
           return Column(
             children: [
               Text(
                 dayLabels[d.weekday - 1],
                 style: TextStyle(
-                  color: isToday ? c.textPrimary : c.textSecondary,
+                  color: isToday ? c.primary : c.textSecondary,
                   fontSize: 11,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Container(
-                width: 32,
-                height: 32,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
-                  color: isToday ? C0Theme.oatmealWhite : C0Theme.sageGreen,
+                  color: isToday ? c.primary : Colors.transparent,
                   shape: BoxShape.circle,
+                  border: isToday
+                      ? null
+                      : Border.all(color: c.divider, width: 1),
                 ),
                 child: Center(
                   child: Text(
                     '${d.day}',
                     style: TextStyle(
-                      color: isToday ? c.header : c.textSecondary,
+                      color: isToday ? Colors.white : c.textPrimary,
                       fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                       fontSize: 13,
                     ),

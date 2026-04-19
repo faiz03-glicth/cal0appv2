@@ -4,6 +4,7 @@ import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cal0appv2/views/debug/debug_view.dart';
 import 'package:cal0appv2/viewmodels/theme_viewmodel.dart';
+import 'package:cal0appv2/views/homepages/widgets/c0_app_bar.dart';
 
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
@@ -15,8 +16,9 @@ class HomeTab extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Home', style: TextStyle(color: c.textPrimary)),
+      backgroundColor: c.background,
+      appBar: C0AppBar(
+        title: 'C0 App',
         actions: [
           IconButton(
             icon: const Icon(Icons.bug_report),
@@ -27,17 +29,8 @@ class HomeTab extends StatelessWidget {
               );
             },
           ),
-
           IconButton(
-            icon: Icon(
-              themeVm.isDark ? Icons.light_mode : Icons.dark_mode,
-              color: themeVm.isDark ? Colors.amber : c.primary,
-            ),
-            onPressed: themeVm.toggleTheme,
-            tooltip: themeVm.isDark ? 'Light mode' : 'Dark mode',
-          ),
-          IconButton(
-            icon: Icon(Icons.logout, color: c.primary),
+            icon: Icon(Icons.logout, color: C0Theme.softBeige),
             onPressed: () => FirebaseAuth.instance.signOut(),
             tooltip: 'Sign out',
           ),
@@ -95,7 +88,7 @@ class HomeTab extends StatelessWidget {
                   Switch(
                     value: themeVm.isDark,
                     onChanged: (_) => themeVm.toggleTheme(),
-                    activeColor: c.primary,
+                    activeThumbColor: c.primary,
                     activeTrackColor: c.track,
                   ),
                 ],

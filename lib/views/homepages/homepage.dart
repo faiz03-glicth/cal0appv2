@@ -24,13 +24,15 @@ class _HomepageState extends State<Homepage> {
 
   @override
   Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
-        selectedItemColor: const Color.fromARGB(255, 87, 35, 176),
-        unselectedItemColor: Colors.grey,
+        backgroundColor: c.card,
+        selectedItemColor: c.primary,
+        unselectedItemColor: c.slate,
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),

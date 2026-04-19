@@ -317,7 +317,7 @@ class _RegisterViewState extends State<RegisterView> {
     );
   }
 
-  // ── helpers ──────────────────────────────────────────────────────────────
+  // ── helpers
 
   Widget _sectionTitle(String title) => Padding(
     padding: const EdgeInsets.only(top: 8, bottom: 12),
@@ -392,7 +392,6 @@ class _RegisterViewState extends State<RegisterView> {
             borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: C0Theme.warningRed, width: 1.5),
           ),
-          // 👇 keeps error text inside — prevents overflow
           errorMaxLines: 2,
         ),
       ),

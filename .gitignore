@@ -12,6 +12,12 @@
 .swiftpm/
 migrate_working_dir/
 
+//Crypt api
+.env
+.env.local
+.env*.local
+*.env
+
 # IntelliJ related
 *.iml
 *.ipr

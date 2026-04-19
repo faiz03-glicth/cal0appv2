@@ -11,14 +11,14 @@ class FoodLogService {
       _db.collection('users').doc(userId).collection('foodLogs');
 
   // CREATE, UPDATE, DELETE operations
-  Future<void> addFoodLog(String userId, FoodLogModel log) => _db
-      .collection('users')
-      .doc(userId)
-      .collection('foodLogs')
-      .doc(log.foodLogID.toString())
-      .set(log.toMap());
+  Future<void> addFoodLog(String userId, FoodLogModel log) async {
+    if (log.foodLogID.isEmpty) {
+      log.foodLogID = _uuid.v4();
+    }
+    await _col(userId).doc(log.foodLogID).set(log.toMap());
+  }
 
-  // READ — today's logs
+  // READ — today's logs ───────────────────────────────────────────────────
   Future<List<FoodLogModel>> getFoodLogs(String userId) async {
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day);
@@ -35,17 +35,17 @@ class FoodLogService {
         .toList();
   }
 
-  Future<void> deleteFoodLog(String userId, String foodLogID) => _db
-      .collection('users')
-      .doc(userId)
-      .collection('foodLogs')
-      .doc(foodLogID.toString())
-      .delete();
-
   Future<void> updateFoodLog(String userId, FoodLogModel log) => _db
       .collection('users')
       .doc(userId)
       .collection('foodLogs')
       .doc(log.foodLogID.toString())
       .update(log.toMap());
+
+  Future<void> deleteFoodLog(String userId, String foodLogID) => _db
+      .collection('users')
+      .doc(userId)
+      .collection('foodLogs')
+      .doc(foodLogID.toString())
+      .delete();
 }

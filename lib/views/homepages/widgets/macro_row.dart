@@ -18,7 +18,6 @@ class MacroRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -80,7 +79,7 @@ class MacroRow extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '${current}g',
+              '${current.toStringAsFixed(1)}g',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,

@@ -9,7 +9,7 @@ class FoodLogViewModel extends ChangeNotifier {
   final NutritionService _api = NutritionService();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  List<FoodLogService> _foodLogs = [];
+  List<FoodLogModel> _foodLogs = [];
   List<Map<String, dynamic>> _searchResults = [];
   bool isLoading = false;
   bool isSaving = false;
@@ -26,7 +26,7 @@ class FoodLogViewModel extends ChangeNotifier {
   double fat = 0;
 
   // ── Getters ───────────────────────────────────────────────────────────────
-  List<FoodLogService> get foodLogs => _foodLogs;
+  List<FoodLogModel> get foodLogs => _foodLogs;
   List<Map<String, dynamic>> get searchResults => _searchResults;
 
   String get _uid => FirebaseAuth.instance.currentUser!.uid;
@@ -42,7 +42,7 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _foodLogs = await FoodLogModel.getFoodLogs(_uid);
+      _foodLogs = await _foodLogService.getFoodLogs(_uid);
     } catch (e) {
       errorMessage = 'Failed to load food logs: $e';
       _foodLogs = [];
@@ -166,7 +166,7 @@ class FoodLogViewModel extends ChangeNotifier {
       );
       log.protein = protein;
       log.carbs = carbs;
-      log.fat = fat;
+      log.fats = fat;
 
       await _foodLogService.addFoodLog(_uid, log);
       successMessage = '${foodName.trim()} added to diary';
@@ -200,7 +200,7 @@ class FoodLogViewModel extends ChangeNotifier {
       existing.calorieIntake = calories.trim();
       existing.protein = protein;
       existing.carbs = carbs;
-      existing.fat = fat;
+      existing.fats = fat;
 
       await _foodLogService.updateFoodLog(_uid, existing);
       successMessage = 'Updated successfully';
@@ -240,8 +240,8 @@ class FoodLogViewModel extends ChangeNotifier {
 
   // ── Totals (used by DashboardViewModel) ───────────────────────────────────
   int get totalCalories =>
-      _foodLogs.fold(0, (s, l) => s + (int.tryParse(l.calorieIntake) ?? 0));
-  double get totalProtein => _foodLogs.fold(0.0, (s, l) => s + l.protein);
-  double get totalCarbs => _foodLogs.fold(0.0, (s, l) => s + l.carbs);
-  double get totalFat => _foodLogs.fold(0.0, (s, l) => s + l.fat);
+      foodLogs.fold(0, (s, l) => s + (int.tryParse(l.calorieIntake) ?? 0));
+  double get totalProtein => foodLogs.fold(0.0, (s, l) => s + l.protein);
+  double get totalCarbs => foodLogs.fold(0.0, (s, l) => s + l.carbs);
+  double get totalFat => foodLogs.fold(0.0, (s, l) => s + l.fats);
 }

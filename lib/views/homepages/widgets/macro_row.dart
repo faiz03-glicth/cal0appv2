@@ -2,9 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
 
 class MacroRow extends StatelessWidget {
-  final List<dynamic> foodLogs;
+  final double totalProtein;
+  final double totalCarbs;
+  final double totalFat;
+  final Map<String, double> targets;
 
-  const MacroRow({super.key, required this.foodLogs});
+  const MacroRow({
+    super.key,
+    required this.totalProtein,
+    required this.totalCarbs,
+    required this.totalFat,
+    required this.targets,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -14,11 +23,23 @@ class MacroRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          _buildMacroCard(c, 'Protein', 82, 150, c.primary),
+          _buildMacroCard(
+            c,
+            'Protein',
+            totalProtein,
+            targets['protein'] ?? 150,
+            c.primary,
+          ),
           const SizedBox(width: 10),
-          _buildMacroCard(c, 'Carbs', 145, 250, c.success),
+          _buildMacroCard(
+            c,
+            'Carbs',
+            totalCarbs,
+            targets['carbs'] ?? 250,
+            c.success,
+          ),
           const SizedBox(width: 10),
-          _buildMacroCard(c, 'Fat', 44, 65, c.slate),
+          _buildMacroCard(c, 'Fat', totalFat, targets['fat'] ?? 65, c.slate),
         ],
       ),
     );

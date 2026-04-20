@@ -36,7 +36,8 @@ class DashboardViewModel extends ChangeNotifier {
 
   int get calorieTarget {
     if (_user == null) return 2000;
-    final birthYear = _user!.birthday.year ?? (DateTime.now().year - 20);
+    final birthYear = _user!.birthday.year;
+    // final birthYear = _user!.birthday.year ?? (DateTime.now().year - 20);
     final age = DateTime.now().year - birthYear;
     final tdee = TDEEModel(
       gender: _user!.gender,

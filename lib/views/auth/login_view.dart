@@ -15,7 +15,7 @@ class LoginView extends StatelessWidget {
     final password = TextEditingController();
 
     return Scaffold(
-      backgroundColor: C0Theme.oatmealWhite, // 👈 always light bg
+      backgroundColor: C0Theme.oatmealWhite,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
@@ -174,10 +174,10 @@ class LoginView extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: C0Theme.warningRed.withOpacity(0.1),
+                    color: C0Theme.warningRed.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: C0Theme.warningRed.withOpacity(0.4),
+                      color: C0Theme.warningRed.withValues(alpha: 0.4),
                     ),
                   ),
                   child: Text(

@@ -9,7 +9,6 @@ import 'package:cal0appv2/views/homepages/widgets/date_strip.dart';
 import 'package:cal0appv2/views/homepages/widgets/c0_app_bar.dart';
 import 'package:cal0appv2/views/homepages/widgets/calorie_ring.dart';
 import 'package:cal0appv2/viewModels/dashboard/dashboard_viewmodel.dart';
-import 'package:cal0appv2/views/homepages/widgets/dashboard_header.dart';
 import 'package:cal0appv2/views/homepages/widgets/nutrient_section.dart';
 
 class DashboardTab extends StatefulWidget {
@@ -54,7 +53,10 @@ class _DashboardTabState extends State<DashboardTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const DateStrip(),
+                    DateStrip(
+                      selectedDate: foodVm.selectedDate,
+                      onDateSelected: (date) => foodVm.selectDate(date),
+                    ),
                     CalorieRing(
                       totalCalories: foodVm.totalCalories,
                       target: dashVm.calorieTarget,

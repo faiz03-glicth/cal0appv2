@@ -1,7 +1,7 @@
 import 'theme/app_theme.dart';
-import 'services/secure_config.dart';
+import 'services/auth/secure_config.dart';
 import 'package:flutter/material.dart';
-import 'services/firebase_options.dart';
+import 'services/firebase/firebase_options.dart';
 import 'package:provider/provider.dart';
 import 'viewModels/wrapper/wrapper.dart';
 import 'viewModels/viewauth/auth_viewmodel.dart';
@@ -11,7 +11,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'viewModels/dashboard/dashboard_viewmodel.dart';
 import 'package:cal0appv2/viewmodels/theme_viewmodel.dart';
-import 'package:cal0appv2/viewModels/foodlog_viewmodel.dart';
+import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
 import 'package:cal0appv2/services/logs/debuglog_services.dart';
 import 'package:cal0appv2/viewModels/viewauth/register_viewmodel.dart';
 

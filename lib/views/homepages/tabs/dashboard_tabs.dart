@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cal0appv2/viewModels/foodlog_viewmodel.dart';
+import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
 import 'package:cal0appv2/views/homepages/widgets/macro_row.dart';
 import 'package:cal0appv2/views/homepages/widgets/food_diary.dart';
 import 'package:cal0appv2/views/homepages/widgets/date_strip.dart';

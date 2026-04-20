@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'secure_config.dart';
+import '../auth/secure_config.dart';
 import 'package:http/http.dart' as http;
 import 'package:cal0appv2/services/users/nutrition_cache_service.dart';
 

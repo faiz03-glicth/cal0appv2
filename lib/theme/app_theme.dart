@@ -88,7 +88,7 @@ class C0Colors {
   Color get headerText => C0Theme.oatmealWhite;
   Color get icon => isDark ? C0Theme.sageGreen : C0Theme.deepSage;
   Color get track =>
-      isDark ? Colors.white12 : C0Theme.sageGreen.withOpacity(0.2);
+      isDark ? Colors.white12 : C0Theme.sageGreen.withValues(alpha: 0.2);
   Color get divider => isDark ? Colors.white12 : C0Theme.lightWarmGrey;
   Color get success => C0Theme.successGreen;
   Color get warning => C0Theme.warningRed;

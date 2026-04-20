@@ -52,6 +52,7 @@ class FoodLogViewModel extends ChangeNotifier {
   bool get isFormValid =>
       foodName.trim().isNotEmpty && calories.trim().isNotEmpty;
 
+
   // ── Select a date (called by DateStrip) ───────────────────────────────────
   Future<void> selectDate(DateTime date) async {
     _selectedDate = DateTime(date.year, date.month, date.day);

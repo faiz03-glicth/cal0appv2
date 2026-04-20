@@ -2,6 +2,7 @@ class DashboardModel {
   String _analysisResult, _nutrientStatus, _userId, _foodLog, _scanLog;
   int _totalCalories;
   List<dynamic> _recentFoodLogs, _recentSupplements;
+  DateTime _selectedDate;
 
   DashboardModel({
     required String analysisResult,
@@ -12,6 +13,7 @@ class DashboardModel {
     required int totalCalories,
     required List<dynamic> recentFoodLogs,
     required List<dynamic> recentSupplements,
+    required DateTime selectedDate,
   }) : _analysisResult = analysisResult,
        _nutrientStatus = nutrientStatus,
        _userId = userId,
@@ -19,7 +21,8 @@ class DashboardModel {
        _scanLog = scanLog,
        _totalCalories = totalCalories,
        _recentFoodLogs = recentFoodLogs,
-       _recentSupplements = recentSupplements;
+       _recentSupplements = recentSupplements,
+       _selectedDate = selectedDate;
 
   // Getters
   String get analysisResult => _analysisResult;
@@ -30,6 +33,7 @@ class DashboardModel {
   int get totalCalories => _totalCalories;
   List<dynamic> get recentFoodLogs => _recentFoodLogs;
   List<dynamic> get recentSupplements => _recentSupplements;
+  DateTime get selectedDate => _selectedDate;
 
   // Setters
   set analysisResult(String value) => _analysisResult = value;
@@ -40,6 +44,7 @@ class DashboardModel {
   set totalCalories(int value) => _totalCalories = value;
   set recentFoodLogs(List<dynamic> value) => _recentFoodLogs = value;
   set recentSupplements(List<dynamic> value) => _recentSupplements = value;
+  set selectedDate(DateTime value) => _selectedDate = value;
 
   Map<String, dynamic> toMap() => {
     'analysisResult': _analysisResult,
@@ -50,5 +55,6 @@ class DashboardModel {
     'totalCalories': _totalCalories,
     'recentFoodLogs': _recentFoodLogs,
     'recentSupplements': _recentSupplements,
+    'selectedDate': _selectedDate.toIso8601String(),
   };
 }

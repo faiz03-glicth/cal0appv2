@@ -128,6 +128,7 @@ class DashboardViewModel extends ChangeNotifier {
       totalCalories: totalCalories,
       recentFoodLogs: _foodLogs.take(5).toList(),
       recentSupplements: [],
+      selectedDate: _selectedDate,
     );
     isLoading = false;
     notifyListeners();

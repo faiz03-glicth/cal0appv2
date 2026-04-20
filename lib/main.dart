@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'services/firebase_options.dart';
 import 'package:provider/provider.dart';
 import 'viewModels/wrapper/wrapper.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'viewModels/viewauth/auth_viewmodel.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'viewModels/usermodel/user_viewmodel.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'viewModels/dashboard/dashboard_viewmodel.dart';
 import 'package:cal0appv2/viewmodels/theme_viewmodel.dart';
 import 'package:cal0appv2/viewModels/foodlog_viewmodel.dart';
@@ -17,28 +17,42 @@ import 'package:cal0appv2/viewModels/viewauth/register_viewmodel.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: 'crypt.env');
-  await SecureConfig.init();
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: 10485760,
-  );
-  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     LogService.error('FLUTTER ERROR: ${details.exception}');
   };
-  //debugPrint("Firebase Initialized");
-  LogService.info("Binding Initialized");
+
+  // await SecureConfig.init();
+  LogService.info("Env loaded");
   try {
+    await dotenv.load(fileName: 'crypt.env');
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
     LogService.info("Firebase Connection Successful");
   } catch (e) {
-    LogService.info("Firebase Error: $e");
+    LogService.error("Firebase Error: $e");
   }
-  await Firebase.initializeApp();
+
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: 10485760,
+  );
+
+  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    await SecureConfig.init();
+    LogService.info("SecureConfig initialized");
+  } catch (e) {
+    LogService.error(
+      "SecureConfig Error: $e — app will continue without API key",
+    );
+    // App still launches; nutrition search just won't work until .env is fixed
+  }
+
+  LogService.info("Starting app");
+  // await Firebase.initializeApp();
 
   runApp(
     MultiProvider(

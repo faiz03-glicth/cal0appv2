@@ -38,9 +38,9 @@ class UserModel {
   String get gender => _gender;
   String get goal => _goal;
   String get activityLevel => _activityLevel;
-  DateTime get birthday => _birthday!;
-  double get weight => _weight!;
-  double get height => _height!;
+  DateTime get birthday => _birthday ?? DateTime(2000, 1, 1);
+  double get weight => _weight ?? 70.0;
+  double get height => _height ?? 170.0;
 
   set userId(String value) => _userId = value;
   set userName(String value) => _userName = value;
@@ -54,16 +54,12 @@ class UserModel {
   set height(double value) => _height = value;
 
   int? get age {
-    if (birthday == null) return null;
-
     final today = DateTime.now();
     int calculatedAge = today.year - birthday.year;
-
     if (today.month < birthday.month ||
         (today.month == birthday.month && today.day < birthday.day)) {
       calculatedAge--;
     }
-
     return calculatedAge;
   }
 
@@ -88,7 +84,7 @@ class UserModel {
     'gender': gender,
     'goal': goal,
     'activityLevel': activityLevel,
-    'birthday': birthday?.toIso8601String(),
+    'birthday': birthday.toIso8601String(),
     'weight': weight,
     'height': height,
   };

@@ -104,7 +104,7 @@ class DashboardViewModel extends ChangeNotifier {
 
     try {
       _user = await _userService.getUser(userId);
-      _foodLogs = await _foodLogService.getFoodLogs(userId);
+      _foodLogs = await _foodLogService.getFoodLogs(userId, DateTime.now());
     } catch (e) {
       errorMessage = e.toString();
       _foodLogs = [];

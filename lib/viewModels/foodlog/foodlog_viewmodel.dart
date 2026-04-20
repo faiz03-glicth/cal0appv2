@@ -1,7 +1,7 @@
-import '../models/foodlog_model.dart';
+import '../../models/foodlog_model.dart';
 import 'package:flutter/material.dart';
-import '../services/nutrition_service.dart';
-import '../services/logs/foodlog_services.dart';
+import '../../services/food/nutrition_service.dart';
+import '../../services/logs/foodlog_services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class FoodLogViewModel extends ChangeNotifier {

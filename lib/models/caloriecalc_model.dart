@@ -18,12 +18,12 @@ class CalorieCalculatorModel {
        _height = height;
 
   // Getters
-  String get goal => _goal;
-  String get gender => _gender;
-  String get activityLevel => _activityLevel;
-  int get age => _age;
-  double get weight => _weight;
-  double get height => _height;
+  String get goals => _goal;
+  String get genders => _gender;
+  String get activityLevels => _activityLevel;
+  int get ages => _age;
+  double get weights => _weight;
+  double get heights => _height;
 
   // Setters
   set goal(String value) => _goal = value;

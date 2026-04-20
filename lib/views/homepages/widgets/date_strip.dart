@@ -65,7 +65,7 @@ class _DateStripState extends State<DateStrip> {
           controller: _scrollController,
           scrollDirection: Axis.horizontal,
           itemCount: _dates.length,
-          separatorBuilder: (_, __) => const SizedBox(width: _itemSpacing),
+          separatorBuilder: (_, _) => const SizedBox(width: _itemSpacing),
           itemBuilder: (context, index) {
             final date = _dates[index];
             final isToday = date == today;

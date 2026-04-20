@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cal0appv2/views/debug/debug_view.dart';
-import 'package:cal0appv2/viewmodels/theme_viewmodel.dart';
+import 'package:cal0appv2/viewModels/theme/theme_viewmodel.dart';
 import 'package:cal0appv2/views/homepages/widgets/c0_app_bar.dart';
 
 class HomeTab extends StatelessWidget {

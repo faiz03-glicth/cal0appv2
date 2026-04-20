@@ -42,7 +42,8 @@ class _UserProfileViewState extends State<UserProfileView> {
           _gender = u.gender;
           _goal = u.goal;
           _activityLevel = u.activityLevel;
-          _birthday = u.birthday ?? DateTime(2000);
+          _birthday = u.birthday;
+          // _birthday = u.birthday ?? DateTime(2000);
         });
       }
     });

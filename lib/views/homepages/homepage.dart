@@ -3,7 +3,7 @@ import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:cal0appv2/views/users/userprofile_view.dart';
 import 'package:cal0appv2/views/homepages/tabs/home_tabs.dart';
 import 'package:cal0appv2/views/homepages/tabs/scan_tabs.dart';
-import 'package:cal0appv2/views/homepages/tabs/dashboard_tabs.dart';
+import 'package:cal0appv2/views/homepages/tabs/dashboard_view.dart';
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});

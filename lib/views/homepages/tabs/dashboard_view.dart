@@ -32,6 +32,8 @@ class _DashboardTabState extends State<DashboardTab> {
 
   @override
   Widget build(BuildContext context) {
+    final viewModel = Provider.of<DashboardViewModel>(context);
+    final userId = FirebaseAuth.instance.currentUser?.uid;
     final c = C0Theme.of(context);
     final dashVm = Provider.of<DashboardViewModel>(context);
     final foodVm = Provider.of<FoodLogViewModel>(context);
@@ -54,8 +56,12 @@ class _DashboardTabState extends State<DashboardTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     DateStrip(
-                      selectedDate: foodVm.selectedDate,
-                      onDateSelected: (date) => foodVm.selectDate(date),
+                      selectedDate: viewModel.selectedDate,
+                      onDateSelected: (newDate) {
+                        if (userId != null) {
+                          viewModel.loadDashboard(userId, date: newDate);
+                        }
+                      },
                     ),
                     CalorieRing(
                       totalCalories: foodVm.totalCalories,

@@ -8,6 +8,8 @@ import 'package:cal0appv2/services/users/user_service.dart';
 import 'package:cal0appv2/services/logs/foodlog_services.dart';
 
 class DashboardViewModel extends ChangeNotifier {
+  DateTime _selectedDate = DateTime.now();
+  DateTime get selectedDate => _selectedDate;
   final FoodLogService _foodLogService = FoodLogService();
   final UserService _userService = UserService();
 
@@ -98,14 +100,18 @@ class DashboardViewModel extends ChangeNotifier {
     return model.calculateMacros();
   }
 
-  Future<void> loadDashboard(String userId) async {
+  Future<void> loadDashboard(String userId, {DateTime? date}) async {
+    if (date != null) {
+      _selectedDate = date;
+    }
+
     isLoading = true;
     errorMessage = null;
     notifyListeners();
 
     try {
       _user = await _userService.getUser(userId);
-      _foodLogs = await _foodLogService.getFoodLogs(userId, DateTime.now());
+      _foodLogs = await _foodLogService.getFoodLogs(userId, _selectedDate);
     } catch (e) {
       errorMessage = e.toString();
       _foodLogs = [];

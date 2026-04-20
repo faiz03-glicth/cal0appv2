@@ -10,7 +10,6 @@ class LoginView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vm = Provider.of<AuthViewModel>(context);
-    final c = C0Theme.of(context);
     final email = TextEditingController();
     final password = TextEditingController();
 

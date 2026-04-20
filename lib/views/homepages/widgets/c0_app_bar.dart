@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
-import 'package:cal0appv2/viewmodels/theme_viewmodel.dart';
+import 'package:cal0appv2/viewModels/theme/theme_viewmodel.dart';
 
 class C0AppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;

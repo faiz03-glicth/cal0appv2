@@ -18,6 +18,14 @@ class FoodLogViewModel extends ChangeNotifier {
   String? errorMessage;
   String? successMessage;
 
+  // Tracks which day the diary is showing — always device-local midnight.
+  DateTime _selectedDate = _todayMidnight();
+
+  static DateTime _todayMidnight() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
   // ── Form field values (owned by ViewModel, not View) ──────────────────────
   String foodName = '';
   String calories = '';
@@ -26,14 +34,30 @@ class FoodLogViewModel extends ChangeNotifier {
   double fat = 0;
 
   // ── Getters ───────────────────────────────────────────────────────────────
+  DateTime get selectedDate => _selectedDate;
   List<FoodLogModel> get foodLogs => _foodLogs;
   List<Map<String, dynamic>> get searchResults => _searchResults;
+
+  /// True when the selected date is today on the device's local clock.
+  bool get isToday {
+    final today = _todayMidnight();
+    return _selectedDate.year == today.year &&
+        _selectedDate.month == today.month &&
+        _selectedDate.day == today.day;
+  }
 
   String get _uid => FirebaseAuth.instance.currentUser!.uid;
 
   // ── Validation ────────────────────────────────────────────────────────────
   bool get isFormValid =>
       foodName.trim().isNotEmpty && calories.trim().isNotEmpty;
+
+  // ── Select a date (called by DateStrip) ───────────────────────────────────
+  Future<void> selectDate(DateTime date) async {
+    _selectedDate = DateTime(date.year, date.month, date.day);
+    notifyListeners();
+    await loadFoodLogs();
+  }
 
   // ── Load today's food logs ─────────────────────────────────────────────────
   Future<void> loadFoodLogs() async {
@@ -42,7 +66,7 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _foodLogs = await _foodLogService.getFoodLogs(_uid);
+      _foodLogs = await _foodLogService.getFoodLogs(_uid, _selectedDate);
     } catch (e) {
       errorMessage = 'Failed to load food logs: $e';
       _foodLogs = [];
@@ -97,6 +121,7 @@ class FoodLogViewModel extends ChangeNotifier {
   }
 
   // ── Update individual form fields ─────────────────────────────────────────
+  // In the future will update on more macros like sodium, fiber, etc.
   void updateFoodName(String v) {
     foodName = v;
     notifyListeners();

@@ -1,5 +1,7 @@
 # 💊 C0: AI-Powered Amino Spiking Detector & Food Analyzer 🧪
 
+##This documentation here are not updated yet, there are files are hidden not showing at the github here
+
 C0 is a cutting-edge mobile application built with Flutter 💙 designed to combat deceptive practices in the supplement industry. It empowers fitness enthusiasts to verify the authenticity of whey protein supplements by detecting "amino spiking" the unethical practice of adding low-cost amino acids to artificially inflate total protein content. 🛡️
 
 ## 🚀 Key Features

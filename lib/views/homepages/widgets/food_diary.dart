@@ -1,9 +1,11 @@
+import 'package:cal0appv2/viewModels/dashboard/dashboard_viewmodel.dart';
+import 'package:intl/intl.dart';
+import '/../theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import '/../models/foodlog_model.dart';
 import 'package:provider/provider.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
-import 'package:cal0appv2/models/foodlog_model.dart';
-import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
-import 'package:cal0appv2/views/homepages/widgets/food_sheet.dart';
+import '/../views/homepages/widgets/food_sheet.dart';
+import '/../viewModels/foodlog/foodlog_viewmodel.dart';
 
 class FoodDiary extends StatelessWidget {
   const FoodDiary({super.key});
@@ -13,6 +15,20 @@ class FoodDiary extends StatelessWidget {
     final c = C0Theme.of(context);
     final vm = Provider.of<FoodLogViewModel>(context);
 
+    // Human-readable label for the selected date in the diary header.
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selected = vm.selectedDate;
+
+    String diaryLabel;
+    if (selected == today) {
+      diaryLabel = "Today's Diary";
+    } else if (selected == today.subtract(const Duration(days: 1))) {
+      diaryLabel = "Yesterday's Diary";
+    } else {
+      diaryLabel = DateFormat('EEE, d MMM').format(selected);
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(16),
@@ -21,7 +37,7 @@ class FoodDiary extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -35,7 +51,7 @@ class FoodDiary extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Food Diary',
+                diaryLabel,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 15,
@@ -52,14 +68,15 @@ class FoodDiary extends StatelessWidget {
               ),
             ],
           ),
+
           if (vm.errorMessage != null)
             Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: c.warning.withOpacity(0.1),
+                color: c.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: c.warning.withOpacity(0.4)),
+                border: Border.all(color: c.warning.withValues(alpha: 0.4)),
               ),
               child: Text(
                 vm.errorMessage!,
@@ -77,7 +94,7 @@ class FoodDiary extends StatelessWidget {
                   ),
                 )
               : vm.foodLogs.isEmpty
-              ? _buildEmpty(c)
+              ? _buildEmpty(c, vm.isToday, selected)
               : Column(
                   children: vm.foodLogs
                       .map<Widget>((log) => _buildItem(context, log, vm, c))
@@ -180,21 +197,36 @@ class FoodDiary extends StatelessWidget {
     );
   }
 
-  Widget _buildEmpty(C0Colors c) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 20),
-    child: Center(
-      child: Column(
-        children: [
-          Icon(Icons.no_food, size: 40, color: c.textSecondary),
-          const SizedBox(height: 8),
-          Text(
-            'No food logged today',
-            style: TextStyle(color: c.textSecondary, fontSize: 13),
-          ),
-        ],
+  Widget _buildEmpty(C0Colors c, bool isToday, DateTime date) {
+    final label = isToday
+        ? 'No food logged today.\nTap + Add to start tracking!'
+        : 'No food logged on ${DateFormat('EEE, d MMM').format(date)}.\nTap + Add to fill it in.';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(
+              isToday ? Icons.no_food : Icons.history,
+              size: 40,
+              color: c.textSecondary,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: c.textSecondary,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   void _openAddSheet(BuildContext context) {
     Provider.of<FoodLogViewModel>(context, listen: false).clearForm();

@@ -18,15 +18,13 @@ class FoodLogViewModel extends ChangeNotifier {
   String? errorMessage;
   String? successMessage;
 
+  // Single source of truth
   // Tracks which day the diary is showing — always device-local midnight.
-  DateTime _selectedDate = _todayMidnight();
+  DateTime _selectedDate = _midnight(DateTime.now());
 
-  static DateTime _todayMidnight() {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day);
-  }
+  static DateTime _midnight(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 
-  // ── Form field values (owned by ViewModel, not View) ──────────────────────
+  // ── Form field values ──────────────────────
   String foodName = '';
   String calories = '';
   double protein = 0;
@@ -39,23 +37,18 @@ class FoodLogViewModel extends ChangeNotifier {
   List<Map<String, dynamic>> get searchResults => _searchResults;
 
   /// True when the selected date is today on the device's local clock.
-  bool get isToday {
-    final today = _todayMidnight();
-    return _selectedDate.year == today.year &&
-        _selectedDate.month == today.month &&
-        _selectedDate.day == today.day;
-  }
-
+  bool get isToday => _selectedDate == _midnight(DateTime.now());
   String get _uid => FirebaseAuth.instance.currentUser!.uid;
 
   // ── Validation ────────────────────────────────────────────────────────────
   bool get isFormValid =>
       foodName.trim().isNotEmpty && calories.trim().isNotEmpty;
 
-
   // ── Select a date (called by DateStrip) ───────────────────────────────────
   Future<void> selectDate(DateTime date) async {
-    _selectedDate = DateTime(date.year, date.month, date.day);
+    final newDate = _midnight(date);
+    if (newDate == _selectedDate) return; // nothing to do
+    _selectedDate = newDate;
     notifyListeners();
     await loadFoodLogs();
   }
@@ -72,7 +65,6 @@ class FoodLogViewModel extends ChangeNotifier {
       errorMessage = 'Failed to load food logs: $e';
       _foodLogs = [];
     }
-
     isLoading = false;
     notifyListeners();
   }
@@ -186,6 +178,16 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final now = DateTime.now();
+      final logDate = isToday
+          ? now
+          : DateTime(
+              _selectedDate.year,
+              _selectedDate.month,
+              _selectedDate.day,
+              12, // noon — safely inside the day window
+            );
+
       final log = FoodLogModel(
         foodLogID: '',
         foodLogName: foodName.trim(),
@@ -199,6 +201,7 @@ class FoodLogViewModel extends ChangeNotifier {
 
       await _foodLogService.addFoodLog(_uid, log);
       successMessage = '${foodName.trim()} added to diary';
+
       await loadFoodLogs();
       clearForm();
       isSaving = false;

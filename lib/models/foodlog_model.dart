@@ -47,27 +47,37 @@ class FoodLogModel {
   set carbs(double value) => _carbs = value;
   set fats(double value) => _fats = value;
 
-  factory FoodLogModel.fromMap(Map<String, dynamic> map) {
-    DateTime _parseDate(dynamic value) {
-      if (value is Timestamp) return value.toDate();
-      if (value is String) return DateTime.parse(value);
-      return DateTime.now();
-    }
-
-    return FoodLogModel(
-      foodLogID: map['foodLogID'],
-      userId: map['userId'],
-      foodLogName: map['foodLogName'],
-      calorieIntake: map['calorieIntake'],
-      foodLogDate: _parseDate(map['foodLogDate']),
-      loggedAt: map['loggedAt'] != null
-          ? DateTime.parse(map['loggedAt'])
-          : DateTime.parse(map['foodLogDate']),
-      protein: map['protein']?.toDouble() ?? 0,
-      carbs: map['carbs']?.toDouble() ?? 0,
-      fats: map['fats']?.toDouble() ?? 0,
-    );
+  static DateTime _parseDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.parse(value);
+    return DateTime.now();
   }
+
+  factory FoodLogModel.fromMap(Map<String, dynamic> map) => FoodLogModel(
+    foodLogID: map['foodLogID'] ?? '',
+    userId: map['userId'] ?? '',
+    foodLogName: map['foodLogName'] ?? '',
+    calorieIntake: map['calorieIntake'] ?? '0',
+    foodLogDate: _parseDate(map['foodLogDate']),
+    // loggedAt may be missing in older documents — fall back to foodLogDate.
+    loggedAt: _parseDate(map['loggedAt'] ?? map['foodLogDate']),
+    protein: (map['protein'] as num?)?.toDouble() ?? 0,
+    carbs: (map['carbs'] as num?)?.toDouble() ?? 0,
+    fats: (map['fats'] as num?)?.toDouble() ?? 0,
+  );
+
+  //   return FoodLogModel(
+  //     foodLogID: map['foodLogID'],
+  //     userId: map['userId'],
+  //     foodLogName: map['foodLogName'],
+  //     calorieIntake: map['calorieIntake'],
+  //     foodLogDate: _parseDate(map['foodLogDate']),
+  //     loggedAt: _parseDate(map['loggedAt'] ?? map['foodLogDate']),
+  //     protein: map['protein']?.toDouble() ?? 0,
+  //     carbs: map['carbs']?.toDouble() ?? 0,
+  //     fats: map['fats']?.toDouble() ?? 0,
+  //   );
+  // }
 
   Map<String, dynamic> toMap() => {
     'foodLogID': _foodLogID,

@@ -1,5 +1,5 @@
-import '../../models/foodlog_model.dart';
 import 'package:flutter/material.dart';
+import '../../models/foodlog_model.dart';
 import '../../services/food/nutrition_service.dart';
 import '../../services/logs/foodlog_services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -193,7 +193,7 @@ class FoodLogViewModel extends ChangeNotifier {
         foodLogName: foodName.trim(),
         calorieIntake: calories.trim(),
         userId: _uid,
-        foodLogDate: DateTime.now(),
+        foodLogDate: logDate,
       );
       log.protein = protein;
       log.carbs = carbs;

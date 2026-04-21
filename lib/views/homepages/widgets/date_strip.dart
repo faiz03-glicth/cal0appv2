@@ -1,6 +1,6 @@
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
+import '/../theme/app_theme.dart';
 
 class DateStrip extends StatefulWidget {
   final DateTime selectedDate;
@@ -24,12 +24,12 @@ class _DateStripState extends State<DateStrip> {
   static const double _itemWidth = 48.0;
   static const double _itemSpacing = 8.0;
 
-  DateTime _stripTime(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
+  DateTime _stripDate(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 
   @override
   void initState() {
     super.initState();
-    final today = _stripTime(DateTime.now());
+    final today = _stripDate(DateTime.now());
 
     // index 0 = 13 days ago, index 13 = today
     _dates = List.generate(
@@ -38,10 +38,10 @@ class _DateStripState extends State<DateStrip> {
     );
 
     // scroll so today is fully visible on the right
-    final offset = (_totalDays - 1) * (_itemWidth + _itemSpacing) - 220;
-    _scrollController = ScrollController(
-      initialScrollOffset: offset.clamp(0.0, double.infinity),
-    );
+    _scrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToSelected(animate: false);
+    });
   }
 
   @override
@@ -50,11 +50,41 @@ class _DateStripState extends State<DateStrip> {
     super.dispose();
   }
 
+  void _scrollToSelected({bool animate = false}) {
+    if (!_scrollController.hasClients) return;
+
+    final index = _dates.indexWhere(
+      (d) => d == _stripDate(widget.selectedDate),
+    );
+    if (index == -1) return;
+
+    final viewportWidth = _scrollController.position.viewportDimension;
+    final targetOffset =
+        index * (_itemWidth + _itemSpacing) -
+        (viewportWidth / 2) +
+        (_itemWidth / 2);
+
+    final clamped = targetOffset.clamp(
+      _scrollController.position.minScrollExtent,
+      _scrollController.position.maxScrollExtent,
+    );
+
+    if (animate) {
+      _scrollController.animateTo(
+        clamped,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      _scrollController.jumpTo(clamped);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
-    final today = _stripTime(DateTime.now());
-    final selected = _stripTime(widget.selectedDate);
+    final today = _stripDate(DateTime.now());
+    final selected = _stripDate(widget.selectedDate);
 
     return Container(
       color: c.card,
@@ -72,9 +102,10 @@ class _DateStripState extends State<DateStrip> {
             final isSelected = date == selected;
 
             return GestureDetector(
-              onTap: () => widget.onDateSelected(date),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
+              onTap: () {
+                widget.onDateSelected(date);
+              },
+              child: Container(
                 width: _itemWidth,
                 decoration: BoxDecoration(
                   color: isSelected ? c.primary : Colors.transparent,

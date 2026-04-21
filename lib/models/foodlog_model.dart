@@ -1,7 +1,8 @@
 class FoodLogModel {
   String _foodLogName, _calorieIntake, _foodLogID, _userId;
   double _protein, _carbs, _fats;
-  DateTime _foodLogDate;
+
+  DateTime _foodLogDate, _loggedAt;
 
   FoodLogModel({
     required String foodLogID,
@@ -9,6 +10,7 @@ class FoodLogModel {
     required String foodLogName,
     required String calorieIntake,
     required DateTime foodLogDate,
+    DateTime? loggedAt,
     double protein = 0,
     double carbs = 0,
     double fats = 0,
@@ -17,6 +19,7 @@ class FoodLogModel {
        _foodLogName = foodLogName,
        _calorieIntake = calorieIntake,
        _foodLogDate = foodLogDate,
+       _loggedAt = loggedAt ?? foodLogDate,
        _protein = protein,
        _carbs = carbs,
        _fats = fats;
@@ -27,6 +30,7 @@ class FoodLogModel {
   String get foodLogName => _foodLogName;
   String get calorieIntake => _calorieIntake;
   DateTime get foodLogDate => _foodLogDate;
+  DateTime get loggedAt => _loggedAt;
   double get protein => _protein;
   double get carbs => _carbs;
   double get fats => _fats;
@@ -47,6 +51,9 @@ class FoodLogModel {
     foodLogName: map['foodLogName'],
     calorieIntake: map['calorieIntake'],
     foodLogDate: DateTime.parse(map['foodLogDate']),
+    loggedAt: map['loggedAt'] != null
+        ? DateTime.parse(map['loggedAt'])
+        : DateTime.parse(map['foodLogDate']),
     protein: map['protein']?.toDouble() ?? 0,
     carbs: map['carbs']?.toDouble() ?? 0,
     fats: map['fats']?.toDouble() ?? 0,
@@ -58,6 +65,7 @@ class FoodLogModel {
     'foodLogName': _foodLogName,
     'calorieIntake': _calorieIntake,
     'foodLogDate': _foodLogDate.toIso8601String(),
+    'loggedAt': _loggedAt.toIso8601String(),
     'protein': _protein,
     'carbs': _carbs,
     'fats': _fats,

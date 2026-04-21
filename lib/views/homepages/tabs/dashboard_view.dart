@@ -1,15 +1,16 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
-import 'package:cal0appv2/views/homepages/widgets/macro_row.dart';
-import 'package:cal0appv2/views/homepages/widgets/food_diary.dart';
-import 'package:cal0appv2/views/homepages/widgets/date_strip.dart';
-import 'package:cal0appv2/views/homepages/widgets/c0_app_bar.dart';
-import 'package:cal0appv2/views/homepages/widgets/calorie_ring.dart';
-import 'package:cal0appv2/viewModels/dashboard/dashboard_viewmodel.dart';
-import 'package:cal0appv2/views/homepages/widgets/nutrient_section.dart';
+import '/../views/homepages/widgets/macro_row.dart';
+import '/../views/homepages/widgets/food_diary.dart';
+import '/../views/homepages/widgets/date_strip.dart';
+import '/../views/homepages/widgets/c0_app_bar.dart';
+import '/../views/homepages/widgets/calorie_ring.dart';
+import '/../viewModels/foodlog/foodlog_viewmodel.dart';
+import '/../viewModels/dashboard/dashboard_viewmodel.dart';
+import '/../views/homepages/widgets/nutrient_section.dart';
 
 class DashboardTab extends StatefulWidget {
   const DashboardTab({super.key});
@@ -30,14 +31,38 @@ class _DashboardTabState extends State<DashboardTab> {
     });
   }
 
+  /// Human-readable label for the selected date.
+  String _dateLabel(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selected = DateTime(date.year, date.month, date.day);
+    if (selected == today) return 'Today';
+    if (selected == today.subtract(const Duration(days: 1))) return 'Yesterday';
+    return DateFormat('EEE, d MMM').format(selected);
+  }
+
+  /// Called when the user taps a day in DateStrip.
+  /// Updates BOTH viewmodels so the calorie target (user profile) and the
+  /// food logs are always in sync with the selected date.
+  void _onDateSelected(BuildContext context, DateTime date) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    // FoodLogViewModel drives the diary list + macro/calorie totals.
+    context.read<FoodLogViewModel>().selectDate(date);
+
+    // DashboardViewModel drives the calorie *target* (from user profile).
+    // We pass the date so it can store it internally if needed.
+    context.read<DashboardViewModel>().loadDashboard(uid, date: date);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final viewModel = Provider.of<DashboardViewModel>(context);
-    final userId = FirebaseAuth.instance.currentUser?.uid;
     final c = C0Theme.of(context);
-    final dashVm = Provider.of<DashboardViewModel>(context);
-    final foodVm = Provider.of<FoodLogViewModel>(context);
     final uid = FirebaseAuth.instance.currentUser!.uid;
+    final foodVm = Provider.of<FoodLogViewModel>(context);
+    final dashVm = Provider.of<DashboardViewModel>(context);
+    final selectedDate = foodVm.selectedDate;
 
     return Scaffold(
       backgroundColor: c.background,
@@ -56,17 +81,29 @@ class _DashboardTabState extends State<DashboardTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     DateStrip(
-                      selectedDate: viewModel.selectedDate,
-                      onDateSelected: (newDate) {
-                        if (userId != null) {
-                          viewModel.loadDashboard(userId, date: newDate);
-                        }
-                      },
+                      selectedDate: selectedDate,
+                      onDateSelected: (date) => _onDateSelected(context, date),
+                    ),
+                    //New Feature for adding Today /Yesterday
+                    //yes surr
+                    // Small "Today / Yesterday / Mon, 14 Apr" label.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                      child: Text(
+                        _dateLabel(selectedDate),
+                        style: TextStyle(
+                          color: c.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
                     ),
                     CalorieRing(
                       totalCalories: foodVm.totalCalories,
                       target: dashVm.calorieTarget,
                     ),
+                    //Macross bros
                     MacroRow(
                       totalProtein: foodVm.totalProtein,
                       totalCarbs: foodVm.totalCarbs,

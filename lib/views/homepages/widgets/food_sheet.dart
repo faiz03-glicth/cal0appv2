@@ -98,7 +98,7 @@ class _FoodSheetState extends State<FoodSheet> {
                 Row(
                   children: [
                     _modeChip(
-                      'Search API',
+                      'Search',
                       !vm.manualMode,
                       c,
                       () => vm.setManualMode(false),

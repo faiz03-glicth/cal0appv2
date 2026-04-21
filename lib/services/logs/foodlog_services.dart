@@ -20,12 +20,14 @@ class FoodLogService {
 
   // READ — today's logs ───────────────────────────────────────────────────
   Future<List<FoodLogModel>> getFoodLogs(String userId, DateTime date) async {
-    final start = DateTime(date.year, date.month, date.day);
-    final end = start.add(const Duration(days: 1));
+    final start = Timestamp.fromDate(DateTime(date.year, date.month, date.day));
+    final end = Timestamp.fromDate(
+      DateTime(date.year, date.month, date.day + 1),
+    );
 
     final snap = await _col(userId)
-        .where('foodLogDate', isGreaterThanOrEqualTo: start.toIso8601String())
-        .where('foodLogDate', isLessThan: end.toIso8601String())
+        .where('foodLogDate', isGreaterThanOrEqualTo: start)
+        .where('foodLogDate', isLessThan: end)
         .orderBy('foodLogDate', descending: false)
         .get();
 

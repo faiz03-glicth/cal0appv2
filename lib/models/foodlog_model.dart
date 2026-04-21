@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class FoodLogModel {
   String _foodLogName, _calorieIntake, _foodLogID, _userId;
   double _protein, _carbs, _fats;
@@ -45,27 +47,35 @@ class FoodLogModel {
   set carbs(double value) => _carbs = value;
   set fats(double value) => _fats = value;
 
-  factory FoodLogModel.fromMap(Map<String, dynamic> map) => FoodLogModel(
-    foodLogID: map['foodLogID'],
-    userId: map['userId'],
-    foodLogName: map['foodLogName'],
-    calorieIntake: map['calorieIntake'],
-    foodLogDate: DateTime.parse(map['foodLogDate']),
-    loggedAt: map['loggedAt'] != null
-        ? DateTime.parse(map['loggedAt'])
-        : DateTime.parse(map['foodLogDate']),
-    protein: map['protein']?.toDouble() ?? 0,
-    carbs: map['carbs']?.toDouble() ?? 0,
-    fats: map['fats']?.toDouble() ?? 0,
-  );
+  factory FoodLogModel.fromMap(Map<String, dynamic> map) {
+    DateTime _parseDate(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.parse(value);
+      return DateTime.now();
+    }
+
+    return FoodLogModel(
+      foodLogID: map['foodLogID'],
+      userId: map['userId'],
+      foodLogName: map['foodLogName'],
+      calorieIntake: map['calorieIntake'],
+      foodLogDate: _parseDate(map['foodLogDate']),
+      loggedAt: map['loggedAt'] != null
+          ? DateTime.parse(map['loggedAt'])
+          : DateTime.parse(map['foodLogDate']),
+      protein: map['protein']?.toDouble() ?? 0,
+      carbs: map['carbs']?.toDouble() ?? 0,
+      fats: map['fats']?.toDouble() ?? 0,
+    );
+  }
 
   Map<String, dynamic> toMap() => {
     'foodLogID': _foodLogID,
     'userId': _userId,
     'foodLogName': _foodLogName,
     'calorieIntake': _calorieIntake,
-    'foodLogDate': _foodLogDate.toIso8601String(),
-    'loggedAt': _loggedAt.toIso8601String(),
+    'foodLogDate': Timestamp.fromDate(_foodLogDate),
+    'loggedAt': Timestamp.fromDate(_loggedAt),
     'protein': _protein,
     'carbs': _carbs,
     'fats': _fats,

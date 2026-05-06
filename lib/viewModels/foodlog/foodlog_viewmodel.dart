@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
-import '../../models/foodlog_model.dart';
-import '../../services/food/nutrition_service.dart';
-import '../../services/logs/foodlog_services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cal0appv2/models/foodlog_model.dart';
+import 'package:cal0appv2/repositories/foodlog_repository.dart';
+import 'package:cal0appv2/repositories/nutrition_repository.dart';
 
+/// ViewModel for the food diary / food sheet.
+/// No Firebase, no services — only repositories.
 class FoodLogViewModel extends ChangeNotifier {
-  final FoodLogService _foodLogService = FoodLogService();
-  final NutritionService _api = NutritionService();
+  final FoodLogRepository _foodLogRepo;
+  final NutritionRepository _nutritionRepo;
+
+  FoodLogViewModel({
+    FoodLogRepository? foodLogRepository,
+    NutritionRepository? nutritionRepository,
+  }) : _foodLogRepo = foodLogRepository ?? FoodLogRepository(),
+       _nutritionRepo = nutritionRepository ?? NutritionRepository();
 
   // ── State ─────────────────────────────────────────────────────────────────
   List<FoodLogModel> _foodLogs = [];
@@ -18,13 +25,10 @@ class FoodLogViewModel extends ChangeNotifier {
   String? errorMessage;
   String? successMessage;
 
-  // Single source of truth
-  // Tracks which day the diary is showing — always device-local midnight.
   DateTime _selectedDate = _midnight(DateTime.now());
-
   static DateTime _midnight(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 
-  // ── Form field values ──────────────────────
+  // ── Form fields ───────────────────────────────────────────────────────────
   String foodName = '';
   String calories = '';
   double protein = 0;
@@ -35,41 +39,43 @@ class FoodLogViewModel extends ChangeNotifier {
   DateTime get selectedDate => _selectedDate;
   List<FoodLogModel> get foodLogs => _foodLogs;
   List<Map<String, dynamic>> get searchResults => _searchResults;
-
-  /// True when the selected date is today on the device's local clock.
   bool get isToday => _selectedDate == _midnight(DateTime.now());
-  String get _uid => FirebaseAuth.instance.currentUser!.uid;
-
-  // ── Validation ────────────────────────────────────────────────────────────
   bool get isFormValid =>
       foodName.trim().isNotEmpty && calories.trim().isNotEmpty;
 
-  // ── Select a date (called by DateStrip) ───────────────────────────────────
+  // Totals — computed from in-memory list via repository helper (no Firestore)
+  int get totalCalories => _foodLogRepo.totalCalories(_foodLogs);
+  double get totalProtein => _foodLogRepo.totalProtein(_foodLogs);
+  double get totalCarbs => _foodLogRepo.totalCarbs(_foodLogs);
+  double get totalFat => _foodLogRepo.totalFat(_foodLogs);
+
+  // ── Date selection ────────────────────────────────────────────────────────
   Future<void> selectDate(DateTime date) async {
     final newDate = _midnight(date);
-    if (newDate == _selectedDate) return; // nothing to do
+    if (newDate == _selectedDate) return;
     _selectedDate = newDate;
     notifyListeners();
-    await loadFoodLogs();
+    await loadFoodLogs(uid: _currentUidOrThrow());
   }
 
-  // ── Load today's food logs ─────────────────────────────────────────────────
-  Future<void> loadFoodLogs() async {
+  // ── Load ──────────────────────────────────────────────────────────────────
+  Future<void> loadFoodLogs({required String uid}) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
 
     try {
-      _foodLogs = await _foodLogService.getFoodLogs(_uid, _selectedDate);
+      _foodLogs = await _foodLogRepo.getFoodLogs(uid, _selectedDate);
     } catch (e) {
       errorMessage = 'Failed to load food logs: $e';
       _foodLogs = [];
     }
+
     isLoading = false;
     notifyListeners();
   }
 
-  // ── Search food via Kalori API ─────────────────────────────────────────────
+  // ── Search ────────────────────────────────────────────────────────────────
   Future<void> searchFood(String query) async {
     if (query.trim().isEmpty) {
       _searchResults = [];
@@ -81,7 +87,7 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _searchResults = await _api.searchFood(query.trim());
+      _searchResults = await _nutritionRepo.searchFood(query.trim());
     } catch (e) {
       _searchResults = [];
       errorMessage = 'Search failed: $e';
@@ -91,30 +97,27 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Select food from search results → populate form fields ────────────────
+  // ── Select from search results ────────────────────────────────────────────
   void selectFood(Map<String, dynamic> food) {
     foodName = food['name'] ?? food['food_name'] ?? food['naman'] ?? '';
     calories = (food['calories'] ?? food['energy'] ?? food['kalori'] ?? 0)
         .toString();
-    protein = (food['protein'] ?? food['proteins'] ?? food['protein'] ?? 0)
-        .toDouble();
+    protein = (food['protein'] ?? food['proteins'] ?? 0).toDouble();
     carbs = (food['carbs'] ?? food['carbohydrates'] ?? food['karbohidrat'] ?? 0)
         .toDouble();
-    fat = (food['fat'] ?? food['cabr'] ?? food['lemak'] ?? 0).toDouble();
+    fat = (food['fat'] ?? food['lemak'] ?? 0).toDouble();
     manualMode = true;
     _searchResults = [];
     notifyListeners();
   }
 
-  // ── Toggle between search and manual mode ─────────────────────────────────
   void setManualMode(bool value) {
     manualMode = value;
     if (!value) _searchResults = [];
     notifyListeners();
   }
 
-  // ── Update individual form fields ─────────────────────────────────────────
-  // In the future will update on more macros like sodium, fiber, etc.
+  // ── Form field updaters ───────────────────────────────────────────────────
   void updateFoodName(String v) {
     foodName = v;
     notifyListeners();
@@ -140,10 +143,9 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Prefill form for editing ───────────────────────────────────────────────
   void prefillForEdit(FoodLogModel log) {
     foodName = log.foodLogName;
-    calories = log.calorieIntake;
+    calories = log.calorieIntake.toString();
     protein = log.protein;
     carbs = log.carbs;
     fat = log.fats;
@@ -151,7 +153,6 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Clear form ─────────────────────────────────────────────────────────────
   void clearForm() {
     foodName = '';
     calories = '';
@@ -165,8 +166,8 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── CREATE ─────────────────────────────────────────────────────────────────
-  Future<bool> addFoodLog() async {
+  // ── CREATE ────────────────────────────────────────────────────────────────
+  Future<bool> addFoodLog({required String uid}) async {
     if (!isFormValid) {
       errorMessage = 'Food name and calories are required';
       notifyListeners();
@@ -178,45 +179,49 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final now = DateTime.now();
       final logDate = isToday
-          ? now
+          ? DateTime.now()
           : DateTime(
               _selectedDate.year,
               _selectedDate.month,
               _selectedDate.day,
-              12, // noon — safely inside the day window
+              12,
             );
 
       final log = FoodLogModel(
         foodLogID: '',
         foodLogName: foodName.trim(),
-        calorieIntake: calories.trim(),
-        userId: _uid,
+        calorieIntake: int.tryParse(calories.trim()) ?? 0,
+        userId: uid,
         foodLogDate: logDate,
       );
       log.protein = protein;
       log.carbs = carbs;
       log.fats = fat;
 
-      await _foodLogService.addFoodLog(_uid, log);
-      successMessage = '${foodName.trim()} added to diary';
+      await _foodLogRepo.addFoodLog(uid, log);
 
-      await loadFoodLogs();
+      // Mutate in memory — no Firestore re-fetch (Bug #18 fix)
+      _foodLogs.add(log);
+      successMessage = '${foodName.trim()} added to diary';
       clearForm();
-      isSaving = false;
-      notifyListeners();
-      return true;
     } catch (e) {
       errorMessage = 'Failed to add food: $e';
       isSaving = false;
       notifyListeners();
       return false;
     }
+
+    isSaving = false;
+    notifyListeners();
+    return true;
   }
 
-  // ── UPDATE ─────────────────────────────────────────────────────────────────
-  Future<bool> updateFoodLog(FoodLogModel existing) async {
+  // ── UPDATE ────────────────────────────────────────────────────────────────
+  Future<bool> updateFoodLog({
+    required String uid,
+    required FoodLogModel existing,
+  }) async {
     if (!isFormValid) {
       errorMessage = 'Food name and calories are required';
       notifyListeners();
@@ -229,51 +234,68 @@ class FoodLogViewModel extends ChangeNotifier {
 
     try {
       existing.foodLogName = foodName.trim();
-      existing.calorieIntake = calories.trim();
+      existing.calorieIntake = int.tryParse(calories.trim()) ?? 0;
       existing.protein = protein;
       existing.carbs = carbs;
       existing.fats = fat;
 
-      await _foodLogService.updateFoodLog(_uid, existing);
+      await _foodLogRepo.updateFoodLog(uid, existing);
+
+      // Update in memory — no Firestore re-fetch (Bug #18 fix)
+      final idx = _foodLogs.indexWhere(
+        (l) => l.foodLogID == existing.foodLogID,
+      );
+      if (idx != -1) _foodLogs[idx] = existing;
       successMessage = 'Updated successfully';
-      await loadFoodLogs();
       clearForm();
-      isSaving = false;
-      notifyListeners();
-      return true;
     } catch (e) {
       errorMessage = 'Failed to update food: $e';
       isSaving = false;
       notifyListeners();
       return false;
     }
+
+    isSaving = false;
+    notifyListeners();
+    return true;
   }
 
-  // ── DELETE ─────────────────────────────────────────────────────────────────
-  Future<bool> deleteFoodLog(String foodLogID) async {
+  // ── DELETE ────────────────────────────────────────────────────────────────
+  Future<bool> deleteFoodLog({
+    required String uid,
+    required String foodLogID,
+  }) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
 
     try {
-      await _foodLogService.deleteFoodLog(_uid, foodLogID);
+      await _foodLogRepo.deleteFoodLog(uid, foodLogID);
+
+      // Remove in memory — no Firestore re-fetch (Bug #18 fix)
+      _foodLogs.removeWhere((l) => l.foodLogID == foodLogID);
       successMessage = 'Food removed from diary';
-      await loadFoodLogs();
-      isLoading = false;
-      notifyListeners();
-      return true;
     } catch (e) {
       errorMessage = 'Failed to delete food: $e';
       isLoading = false;
       notifyListeners();
       return false;
     }
+
+    isLoading = false;
+    notifyListeners();
+    return true;
   }
 
-  // ── Totals (used by DashboardViewModel) ───────────────────────────────────
-  int get totalCalories =>
-      foodLogs.fold(0, (s, l) => s + (int.tryParse(l.calorieIntake) ?? 0));
-  double get totalProtein => foodLogs.fold(0.0, (s, l) => s + l.protein);
-  double get totalCarbs => foodLogs.fold(0.0, (s, l) => s + l.carbs);
-  double get totalFat => foodLogs.fold(0.0, (s, l) => s + l.fats);
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  /// Guard used by selectDate — uid must be passed in from outside since
+  /// ViewModels never read FirebaseAuth directly.
+  /// Call loadFoodLogs(uid: ...) directly from Views/other VMs instead.
+  String _currentUidOrThrow() {
+    throw StateError(
+      'selectDate requires uid — call loadFoodLogs(uid: uid) directly '
+      'or pass uid into selectDate(date, uid: uid).',
+    );
+  }
 }

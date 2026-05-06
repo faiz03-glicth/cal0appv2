@@ -2,7 +2,6 @@ import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '/../views/homepages/widgets/macro_row.dart';
 import '/../views/homepages/widgets/food_diary.dart';
 import '/../views/homepages/widgets/date_strip.dart';
@@ -11,6 +10,7 @@ import '/../views/homepages/widgets/calorie_ring.dart';
 import '/../viewModels/foodlog/foodlog_viewmodel.dart';
 import '/../viewModels/dashboard/dashboard_viewmodel.dart';
 import '/../views/homepages/widgets/nutrient_section.dart';
+import '/../viewModels/viewauth/auth_viewmodel.dart';
 
 class DashboardTab extends StatefulWidget {
   const DashboardTab({super.key});
@@ -23,9 +23,10 @@ class _DashboardTabState extends State<DashboardTab> {
   @override
   void initState() {
     super.initState();
-    final uid = FirebaseAuth.instance.currentUser!.uid;
     Future.microtask(() {
       if (!mounted) return;
+      final uid = context.read<AuthViewModel>().currentUid ?? '';
+      if (uid.isEmpty) return;
       context.read<DashboardViewModel>().loadDashboard(uid);
       context.read<FoodLogViewModel>().loadFoodLogs();
     });
@@ -45,21 +46,17 @@ class _DashboardTabState extends State<DashboardTab> {
   /// Updates BOTH viewmodels so the calorie target (user profile) and the
   /// food logs are always in sync with the selected date.
   void _onDateSelected(BuildContext context, DateTime date) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    final uid = context.read<AuthViewModel>().currentUid ?? '';
+    if (uid.isEmpty) return;
 
-    // FoodLogViewModel drives the diary list + macro/calorie totals.
     context.read<FoodLogViewModel>().selectDate(date);
-
-    // DashboardViewModel drives the calorie *target* (from user profile).
-    // We pass the date so it can store it internally if needed.
     context.read<DashboardViewModel>().loadDashboard(uid, date: date);
   }
 
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final uid = context.read<AuthViewModel>().currentUid ?? '';
     final foodVm = Provider.of<FoodLogViewModel>(context);
     final dashVm = Provider.of<DashboardViewModel>(context);
     final selectedDate = foodVm.selectedDate;

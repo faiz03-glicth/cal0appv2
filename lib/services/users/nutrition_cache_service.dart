@@ -1,16 +1,26 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Cache layer for nutrition API responses.
+/// Fixed Bug #21 — SharedPreferences instance is now cached as a static
+/// singleton instead of being opened on every single call.
 class NutritionCacheService {
   static const Duration _cacheDuration = Duration(hours: 24);
   static const String _prefix = 'nutrition_cache_';
 
-  // ── Save search results to cache ──────────────────────────────────────────
+  // ── Singleton instance (Bug #21 fix) ──────────────────────────────────────
+  static SharedPreferences? _prefs;
+
+  static Future<SharedPreferences> get _instance async =>
+      _prefs ??= await SharedPreferences.getInstance();
+
+  // ── Search cache ──────────────────────────────────────────────────────────
+
   static Future<void> saveSearch(
     String query,
     List<Map<String, dynamic>> results,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _instance;
     final key = '$_prefix${query.toLowerCase().trim()}';
 
     final payload = json.encode({
@@ -21,9 +31,8 @@ class NutritionCacheService {
     await prefs.setString(key, payload);
   }
 
-  // ── Get cached search results ─────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>?> getSearch(String query) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _instance;
     final key = '$_prefix${query.toLowerCase().trim()}';
     final raw = prefs.getString(key);
 
@@ -31,10 +40,10 @@ class NutritionCacheService {
 
     try {
       final payload = json.decode(raw);
-      final timestamp = payload['timestamp'] as int;
-      final savedAt = DateTime.fromMillisecondsSinceEpoch(timestamp);
+      final savedAt = DateTime.fromMillisecondsSinceEpoch(
+        payload['timestamp'] as int,
+      );
 
-      // Expired — return null so fresh fetch happens
       if (DateTime.now().difference(savedAt) > _cacheDuration) {
         await prefs.remove(key);
         return null;
@@ -46,9 +55,10 @@ class NutritionCacheService {
     }
   }
 
-  // ── Save categories ───────────────────────────────────────────────────────
+  // ── Categories cache ──────────────────────────────────────────────────────
+
   static Future<void> saveCategories(List<String> categories) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _instance;
     await prefs.setStringList('${_prefix}categories', categories);
     await prefs.setInt(
       '${_prefix}categories_ts',
@@ -56,9 +66,8 @@ class NutritionCacheService {
     );
   }
 
-  // ── Get cached categories ─────────────────────────────────────────────────
   static Future<List<String>?> getCategories() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _instance;
     final ts = prefs.getInt('${_prefix}categories_ts');
 
     if (ts == null) return null;
@@ -72,11 +81,11 @@ class NutritionCacheService {
     return prefs.getStringList('${_prefix}categories');
   }
 
-  // ── Clear all nutrition cache ─────────────────────────────────────────────
-  static Future<void> clearAll() async {
-    final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys().where((k) => k.startsWith(_prefix)).toList();
+  // ── Clear ─────────────────────────────────────────────────────────────────
 
+  static Future<void> clearAll() async {
+    final prefs = await _instance;
+    final keys = prefs.getKeys().where((k) => k.startsWith(_prefix)).toList();
     for (final key in keys) {
       await prefs.remove(key);
     }

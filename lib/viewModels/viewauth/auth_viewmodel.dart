@@ -1,110 +1,67 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cal0appv2/services/auth/auth_service.dart';
+import '../../repositories/auth_repository.dart';
 
 class AuthViewModel extends ChangeNotifier {
-  final AuthService _authService = AuthService();
+  final AuthRepository _authRepo;
+
+  AuthViewModel({AuthRepository? authRepository})
+    : _authRepo = authRepository ?? AuthRepository();
 
   bool isLoading = false;
   String? errorMessage;
   String? successMessage;
 
-  Future<void> signIn(String email, String password) async {
+  String? get currentUid => _authRepo.currentUid;
+  bool get isSignedIn => _authRepo.isSignedIn;
+  Stream<User?> get authStateChanges => _authRepo.authStateChanges;
+
+  Future<bool> signIn(String email, String password) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
 
     try {
-      await _authService.signIn(email, password);
+      final uid = await _authRepo.signIn(email, password);
       isLoading = false;
       notifyListeners();
+      return uid != null;
     } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'user-not-found':
-          errorMessage = 'No user found for that email';
-          break;
-        case 'wrong-password':
-          errorMessage = 'Incorrect password';
-          break;
-        default:
-          errorMessage = e.message ?? 'Login failed';
-      }
+      errorMessage = _friendlyAuthError(e.code);
       isLoading = false;
       notifyListeners();
+      return false;
+    } catch (e) {
+      errorMessage = 'Sign in failed. Please try again.';
+      isLoading = false;
+      notifyListeners();
+      return false;
     }
   }
 
-  Future<bool> register({
-    required String userName,
-    required String userEmail,
-    required String userPassword,
-    required String confirmPassword,
-    required String gender,
-    required String goal,
-    required String activityLevel,
-    required DateTime birthday,
-    required double weight,
-    required double height,
-  }) async {
-    // Validation
-    if (userName.isEmpty || userEmail.isEmpty || userPassword.isEmpty) {
-      errorMessage = 'Please fill in all fields';
-      notifyListeners();
-      return false;
-    }
-    if (!userEmail.contains('@')) {
-      errorMessage = 'Invalid email format';
-      notifyListeners();
-      return false;
-    }
-    if (userPassword.length < 6) {
-      errorMessage = 'Password must be at least 6 characters';
-      notifyListeners();
-      return false;
-    }
-    if (userPassword != confirmPassword) {
-      errorMessage = 'Passwords do not match';
-      notifyListeners();
-      return false;
-    }
-
-    isLoading = true;
-    errorMessage = null;
+  Future<void> signOut() async {
+    await _authRepo.signOut();
     notifyListeners();
+  }
 
-    try {
-      await _authService.register(
-        userName: userName,
-        userEmail: userEmail,
-        userPassword: userPassword,
-        gender: gender,
-        goal: goal,
-        activityLevel: activityLevel,
-        birthday: birthday,
-        weight: weight,
-        height: height,
-      );
-      successMessage = 'Account created successfully!';
-      isLoading = false;
-      notifyListeners();
-      return true;
-    } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'email-already-in-use':
-          errorMessage = 'This email is already registered';
-          break;
-        case 'invalid-email':
-          errorMessage = 'Invalid email format';
-          break;
-        case 'weak-password':
-          errorMessage = 'Password is too weak';
-          break;
-        default:
-          errorMessage = e.message ?? 'Registration failed';
-      }
-      isLoading = false;
-      notifyListeners();
-      return false;
+  void clearMessages() {
+    errorMessage = null;
+    successMessage = null;
+    notifyListeners();
+  }
+
+  String _friendlyAuthError(String code) {
+    switch (code) {
+      case 'invalid-email':
+        return 'Invalid email address.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'user-not-found':
+        return 'No account found with this email.';
+      case 'wrong-password':
+        return 'Incorrect password. Please try again.';
+      default:
+        return 'Authentication error: $code';
     }
   }
 }

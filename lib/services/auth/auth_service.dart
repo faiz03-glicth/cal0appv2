@@ -7,7 +7,7 @@ class AuthService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
-
+  String? get currentUid => _auth.currentUser?.uid;
   // Register — creates Auth user AND saves to Firestore
   Future<User?> register({
     required String userName,
@@ -34,7 +34,7 @@ class AuthService {
       userId: user.uid,
       userName: userName,
       userEmail: userEmail,
-      userPassword: '',
+      // userPassword: '',
       gender: gender,
       goal: goal,
       activityLevel: activityLevel,

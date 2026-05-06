@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FoodLogModel {
-  String _foodLogName, _calorieIntake, _foodLogID, _userId;
+  String _foodLogName, _foodLogID, _userId;
+  int _calorieIntake;
   double _protein, _carbs, _fats;
 
   DateTime _foodLogDate, _loggedAt;
@@ -10,7 +11,7 @@ class FoodLogModel {
     required String foodLogID,
     required String userId,
     required String foodLogName,
-    required String calorieIntake,
+    required int calorieIntake,
     required DateTime foodLogDate,
     DateTime? loggedAt,
     double protein = 0,
@@ -30,7 +31,7 @@ class FoodLogModel {
   String get foodLogID => _foodLogID;
   String get userId => _userId;
   String get foodLogName => _foodLogName;
-  String get calorieIntake => _calorieIntake;
+  int get calorieIntake => _calorieIntake;
   DateTime get foodLogDate => _foodLogDate;
   DateTime get loggedAt => _loggedAt;
   double get protein => _protein;
@@ -41,7 +42,7 @@ class FoodLogModel {
   set foodLogID(String value) => _foodLogID = value;
   set userId(String value) => _userId = value;
   set foodLogName(String value) => _foodLogName = value;
-  set calorieIntake(String value) => _calorieIntake = value;
+  set calorieIntake(int value) => _calorieIntake = value;
   set foodLogDate(DateTime value) => _foodLogDate = value;
   set protein(double value) => _protein = value;
   set carbs(double value) => _carbs = value;
@@ -57,7 +58,7 @@ class FoodLogModel {
     foodLogID: map['foodLogID'] ?? '',
     userId: map['userId'] ?? '',
     foodLogName: map['foodLogName'] ?? '',
-    calorieIntake: map['calorieIntake'] ?? '0',
+    calorieIntake: (map['calorieIntake'] as num?)?.toInt() ?? 0,
     foodLogDate: _parseDate(map['foodLogDate']),
     // loggedAt may be missing in older documents — fall back to foodLogDate.
     loggedAt: _parseDate(map['loggedAt'] ?? map['foodLogDate']),
@@ -65,19 +66,6 @@ class FoodLogModel {
     carbs: (map['carbs'] as num?)?.toDouble() ?? 0,
     fats: (map['fats'] as num?)?.toDouble() ?? 0,
   );
-
-  //   return FoodLogModel(
-  //     foodLogID: map['foodLogID'],
-  //     userId: map['userId'],
-  //     foodLogName: map['foodLogName'],
-  //     calorieIntake: map['calorieIntake'],
-  //     foodLogDate: _parseDate(map['foodLogDate']),
-  //     loggedAt: _parseDate(map['loggedAt'] ?? map['foodLogDate']),
-  //     protein: map['protein']?.toDouble() ?? 0,
-  //     carbs: map['carbs']?.toDouble() ?? 0,
-  //     fats: map['fats']?.toDouble() ?? 0,
-  //   );
-  // }
 
   Map<String, dynamic> toMap() => {
     'foodLogID': _foodLogID,

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cal0appv2/services/auth/auth_service.dart';
+import '../../repositories/auth_repository.dart';
 
 class RegisterViewModel extends ChangeNotifier {
-  final AuthService _authService = AuthService();
+  final AuthRepository _authRepo;
+
+  RegisterViewModel({AuthRepository? authRepository})
+    : _authRepo = authRepository ?? AuthRepository();
 
   bool isLoading = false;
   String? errorMessage;
@@ -48,9 +51,9 @@ class RegisterViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _authService.register(
-        userName: userName,
-        userEmail: userEmail,
+      final uid = await _authRepo.register(
+        userName: userName.trim(),
+        userEmail: userEmail.trim(),
         userPassword: userPassword,
         gender: gender,
         goal: goal,
@@ -59,27 +62,42 @@ class RegisterViewModel extends ChangeNotifier {
         weight: weight,
         height: height,
       );
-      successMessage = 'Account created successfully!';
+
       isLoading = false;
+      successMessage = 'Account created successfully';
       notifyListeners();
-      return true;
+      return uid != null;
     } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'email-already-in-use':
-          errorMessage = 'This email is already registered';
-          break;
-        case 'invalid-email':
-          errorMessage = 'Invalid email format';
-          break;
-        case 'weak-password':
-          errorMessage = 'Password is too weak';
-          break;
-        default:
-          errorMessage = e.message ?? 'Registration failed';
-      }
+      errorMessage = _friendlyAuthError(e.code);
       isLoading = false;
       notifyListeners();
       return false;
+    } catch (e) {
+      errorMessage = 'Registration failed. Please try again.';
+      isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  void clearMessages() {
+    errorMessage = null;
+    successMessage = null;
+    notifyListeners();
+  }
+
+  String _friendlyAuthError(String code) {
+    switch (code) {
+      case 'email-already-in-use':
+        return 'An account with this email already exists.';
+      case 'invalid-email':
+        return 'Invalid email address.';
+      case 'weak-password':
+        return 'Password is too weak. Use at least 6 characters.';
+      case 'operation-not-allowed':
+        return 'Registration is currently disabled.';
+      default:
+        return 'Registration failed. Please try again.';
     }
   }
 }

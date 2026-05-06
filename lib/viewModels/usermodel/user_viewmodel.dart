@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import '/models/user_model.dart';
-import 'package:cal0appv2/services/users/user_service.dart';
+import 'package:cal0appv2/repositories/auth_repository.dart';
+import 'package:cal0appv2/repositories/user_repository.dart';
 
 class UserViewModel extends ChangeNotifier {
-  final UserService _userService = UserService();
+  final UserRepository _userRepo;
+  final AuthRepository _authRepo;
+
+  UserViewModel({
+    UserRepository? userRepository,
+    AuthRepository? authRepository,
+  }) : _userRepo = userRepository ?? UserRepository(),
+       _authRepo = authRepository ?? AuthRepository();
 
   UserModel? _user;
   bool isLoading = false;
@@ -11,6 +19,7 @@ class UserViewModel extends ChangeNotifier {
   String? successMessage;
 
   UserModel? get user => _user;
+  String? get currentUid => _authRepo.currentUid;
   String get userId => _user?.userId ?? '';
   String get userName => _user?.userName ?? '';
   String get userEmail => _user?.userEmail ?? '';
@@ -27,7 +36,7 @@ class UserViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _user = await _userService.getUser(userId);
+      _user = await _userRepo.getUser(userId);
     } catch (e) {
       errorMessage = 'Failed to load user: $e';
     }
@@ -75,7 +84,7 @@ class UserViewModel extends ChangeNotifier {
         ..weight = weight
         ..height = height;
 
-      await _userService.updateUser(_user!);
+      await _userRepo.updateUser(_user!);
       successMessage = 'Profile updated successfully';
     } catch (e) {
       errorMessage = 'Failed to update profile: $e';
@@ -97,7 +106,7 @@ class UserViewModel extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      await _userService.updatePassword(userId, newPassword);
+      await _userRepo.updatePassword(userId, newPassword);
       successMessage = 'Password updated successfully';
     } catch (e) {
       errorMessage = 'Failed to update password: $e';

@@ -410,7 +410,7 @@ class _RegisterViewState extends State<RegisterView> {
       _fieldLabel(label),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
-        value: value,
+        initialValue: value,
         dropdownColor: Colors.white,
         style: const TextStyle(color: C0Theme.charcoal, fontSize: 15),
         icon: const Icon(Icons.keyboard_arrow_down, color: C0Theme.deepSage),

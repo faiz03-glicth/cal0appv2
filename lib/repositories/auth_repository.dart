@@ -1,6 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cal0appv2/services/auth/auth_service.dart';
-import '/../viewModels/usermodel/user_viewmodel.dart';
 
 /// Single access point for all authentication operations.
 /// ViewModels must never import firebase_auth or AuthService directly —

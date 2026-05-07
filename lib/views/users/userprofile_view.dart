@@ -380,7 +380,7 @@ class _UserProfileViewState extends State<UserProfileView> {
   ) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       dropdownColor: c.card,
       style: TextStyle(color: c.textPrimary, fontSize: 15),
       icon: Icon(Icons.keyboard_arrow_down, color: c.primary),

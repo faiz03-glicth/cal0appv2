@@ -1,4 +1,3 @@
-import 'package:cal0appv2/viewModels/dashboard/dashboard_viewmodel.dart';
 import 'package:intl/intl.dart';
 import '/../theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +5,7 @@ import '/../models/foodlog_model.dart';
 import 'package:provider/provider.dart';
 import '/../views/homepages/widgets/food_sheet.dart';
 import '/../viewModels/foodlog/foodlog_viewmodel.dart';
+import '/../viewModels/viewauth/auth_viewmodel.dart';
 
 class FoodDiary extends StatelessWidget {
   const FoodDiary({super.key});
@@ -259,6 +259,7 @@ class FoodDiary extends StatelessWidget {
     FoodLogViewModel vm,
     C0Colors c,
   ) {
+    final uid = context.read<AuthViewModel>().currentUid ?? '';
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -276,7 +277,7 @@ class FoodDiary extends StatelessWidget {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              vm.deleteFoodLog(log.foodLogID);
+              vm.deleteFoodLog(uid: uid, foodLogID: log.foodLogID);
             },
             child: Text(
               'Delete',

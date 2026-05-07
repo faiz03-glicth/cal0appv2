@@ -28,7 +28,7 @@ class _DashboardTabState extends State<DashboardTab> {
       final uid = context.read<AuthViewModel>().currentUid ?? '';
       if (uid.isEmpty) return;
       context.read<DashboardViewModel>().loadDashboard(uid);
-      context.read<FoodLogViewModel>().loadFoodLogs();
+      context.read<FoodLogViewModel>().loadFoodLogs(uid: uid);
     });
   }
 
@@ -70,7 +70,7 @@ class _DashboardTabState extends State<DashboardTab> {
               color: c.primary,
               onRefresh: () async {
                 await dashVm.loadDashboard(uid);
-                await foodVm.loadFoodLogs();
+                await foodVm.loadFoodLogs(uid: uid);
               },
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:cal0appv2/models/foodlog_model.dart';
 import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
+import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 
 class FoodSheet extends StatefulWidget {
   final bool isEdit;
@@ -254,11 +255,17 @@ class _FoodSheetState extends State<FoodSheet> {
                     onPressed: vm.isSaving || !vm.isFormValid
                         ? null
                         : () async {
+                            final uid =
+                                context.read<AuthViewModel>().currentUid ?? '';
+                            if (uid.isEmpty) return;
                             bool ok;
                             if (widget.isEdit && widget.existing != null) {
-                              ok = await vm.updateFoodLog(widget.existing!);
+                              ok = await vm.updateFoodLog(
+                                uid: uid,
+                                existing: widget.existing!,
+                              );
                             } else {
-                              ok = await vm.addFoodLog();
+                              ok = await vm.addFoodLog(uid: uid);
                             }
                             if (ok && context.mounted) {
                               Navigator.pop(context);

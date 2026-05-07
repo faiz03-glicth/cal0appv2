@@ -14,8 +14,6 @@ class FoodDiary extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
     final vm = Provider.of<FoodLogViewModel>(context);
-
-    // Human-readable label for the selected date in the diary header.
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final selected = vm.selectedDate;
@@ -46,7 +44,7 @@ class FoodDiary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with "Food Diary" title and "Add" button
+          // ── Header ──────────────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -69,6 +67,7 @@ class FoodDiary extends StatelessWidget {
             ],
           ),
 
+          // ── Error banner ─────────────────────────────────────────────────
           if (vm.errorMessage != null)
             Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -83,28 +82,32 @@ class FoodDiary extends StatelessWidget {
                 style: TextStyle(color: c.warning, fontSize: 12),
               ),
             ),
-          vm.isLoading
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: CircularProgressIndicator(
-                      color: c.primary,
-                      strokeWidth: 2,
-                    ),
-                  ),
-                )
-              : vm.foodLogs.isEmpty
-              ? _buildEmpty(c, vm.isToday, selected)
-              : Column(
-                  children: vm.foodLogs
-                      .map<Widget>((log) => _buildItem(context, log, vm, c))
-                      .toList(),
+
+          // ── Content ──────────────────────────────────────────────────────
+          if (vm.isLoading)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: CircularProgressIndicator(
+                  color: c.primary,
+                  strokeWidth: 2,
                 ),
+              ),
+            )
+          else if (vm.foodLogs.isEmpty)
+            _buildEmpty(c, vm.isToday, selected)
+          else
+            Column(
+              children: vm.foodLogs
+                  .map<Widget>((log) => _buildItem(context, log, vm, c))
+                  .toList(),
+            ),
         ],
       ),
     );
   }
 
+  // ── Log item row ──────────────────────────────────────────────────────────
   Widget _buildItem(
     BuildContext context,
     FoodLogModel log,
@@ -118,6 +121,7 @@ class FoodDiary extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // Icon
           Container(
             width: 36,
             height: 36,
@@ -128,6 +132,8 @@ class FoodDiary extends StatelessWidget {
             child: Icon(Icons.restaurant, size: 18, color: c.primary),
           ),
           const SizedBox(width: 12),
+
+          // Name + macros
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,6 +155,8 @@ class FoodDiary extends StatelessWidget {
               ],
             ),
           ),
+
+          // Calories
           Text(
             '${log.calorieIntake} kcal',
             style: TextStyle(
@@ -158,6 +166,8 @@ class FoodDiary extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
+
+          // Edit / Delete menu
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: c.textSecondary, size: 18),
             color: c.card,
@@ -197,6 +207,7 @@ class FoodDiary extends StatelessWidget {
     );
   }
 
+  // ── Empty state ───────────────────────────────────────────────────────────
   Widget _buildEmpty(C0Colors c, bool isToday, DateTime date) {
     final label = isToday
         ? 'No food logged today.\nTap + Add to start tracking!'
@@ -228,6 +239,7 @@ class FoodDiary extends StatelessWidget {
     );
   }
 
+  // ── Sheet helpers ─────────────────────────────────────────────────────────
   void _openAddSheet(BuildContext context) {
     Provider.of<FoodLogViewModel>(context, listen: false).clearForm();
     _openSheet(context, isEdit: false);

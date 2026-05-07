@@ -21,8 +21,12 @@ class FoodLogModel {
        _userId = userId,
        _foodLogName = foodLogName,
        _calorieIntake = calorieIntake,
-       _foodLogDate = foodLogDate,
-       _loggedAt = loggedAt ?? foodLogDate,
+       _foodLogDate = DateTime(
+         foodLogDate.year,
+         foodLogDate.month,
+         foodLogDate.day,
+       ),
+       _loggedAt = loggedAt ?? DateTime.now(),
        _protein = protein,
        _carbs = carbs,
        _fats = fats;
@@ -43,7 +47,8 @@ class FoodLogModel {
   set userId(String value) => _userId = value;
   set foodLogName(String value) => _foodLogName = value;
   set calorieIntake(int value) => _calorieIntake = value;
-  set foodLogDate(DateTime value) => _foodLogDate = value;
+  set foodLogDate(DateTime v) =>
+      _foodLogDate = DateTime(v.year, v.month, v.day);
   set protein(double value) => _protein = value;
   set carbs(double value) => _carbs = value;
   set fats(double value) => _fats = value;
@@ -60,8 +65,9 @@ class FoodLogModel {
     foodLogName: map['foodLogName'] ?? '',
     calorieIntake: (map['calorieIntake'] as num?)?.toInt() ?? 0,
     foodLogDate: _parseDate(map['foodLogDate']),
-    // loggedAt may be missing in older documents — fall back to foodLogDate.
-    loggedAt: _parseDate(map['loggedAt'] ?? map['foodLogDate']),
+    loggedAt: _parseDate(
+      map['loggedAt'] ?? map['foodLogDate'],
+    ), //NEED TO ADD IN DOCUMENTATION
     protein: (map['protein'] as num?)?.toDouble() ?? 0,
     carbs: (map['carbs'] as num?)?.toDouble() ?? 0,
     fats: (map['fats'] as num?)?.toDouble() ?? 0,
@@ -72,7 +78,9 @@ class FoodLogModel {
     'userId': _userId,
     'foodLogName': _foodLogName,
     'calorieIntake': _calorieIntake,
-    'foodLogDate': Timestamp.fromDate(_foodLogDate),
+    'foodLogDate': Timestamp.fromDate(
+      DateTime(_foodLogDate.year, _foodLogDate.month, _foodLogDate.day),
+    ),
     'loggedAt': Timestamp.fromDate(_loggedAt),
     'protein': _protein,
     'carbs': _carbs,

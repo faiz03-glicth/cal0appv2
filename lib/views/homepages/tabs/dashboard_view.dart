@@ -32,7 +32,6 @@ class _DashboardTabState extends State<DashboardTab> {
     });
   }
 
-  /// Human-readable label for the selected date.
   String _dateLabel(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -42,14 +41,13 @@ class _DashboardTabState extends State<DashboardTab> {
     return DateFormat('EEE, d MMM').format(selected);
   }
 
-  /// Called when the user taps a day in DateStrip.
-  /// Updates BOTH viewmodels so the calorie target (user profile) and the
-  /// food logs are always in sync with the selected date.
-  void _onDateSelected(BuildContext context, DateTime date) {
+  Future<void> _onDateSelected(BuildContext context, DateTime date) async {
     final uid = context.read<AuthViewModel>().currentUid ?? '';
     if (uid.isEmpty) return;
 
-    context.read<FoodLogViewModel>().selectDate(date);
+    await context.read<FoodLogViewModel>().changeSelectedDate(date, uid: uid);
+
+    if (!context.mounted) return;
     context.read<DashboardViewModel>().loadDashboard(uid, date: date);
   }
 

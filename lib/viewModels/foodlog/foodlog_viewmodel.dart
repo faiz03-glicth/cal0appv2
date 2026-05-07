@@ -15,6 +15,11 @@ class FoodLogViewModel extends ChangeNotifier {
   }) : _foodLogRepo = foodLogRepository ?? FoodLogRepository(),
        _nutritionRepo = nutritionRepository ?? NutritionRepository();
 
+  // ── Internal helpers ──────────────────────────────────────────────────────
+
+  /// Strips time component — all date comparisons and storage use this.
+  static DateTime _midnight(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
+
   // ── State ─────────────────────────────────────────────────────────────────
   List<FoodLogModel> _foodLogs = [];
   List<Map<String, dynamic>> _searchResults = [];
@@ -26,7 +31,7 @@ class FoodLogViewModel extends ChangeNotifier {
   String? successMessage;
 
   DateTime _selectedDate = _midnight(DateTime.now());
-  static DateTime _midnight(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
+  // static DateTime _midnight(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 
   // ── Form fields ───────────────────────────────────────────────────────────
   String foodName = '';
@@ -50,12 +55,15 @@ class FoodLogViewModel extends ChangeNotifier {
   double get totalFat => _foodLogRepo.totalFat(_foodLogs);
 
   // ── Date selection ────────────────────────────────────────────────────────
-  Future<void> selectDate(DateTime date) async {
+  Future<void> changeSelectedDate(DateTime date, {required String uid}) async {
     final newDate = _midnight(date);
     if (newDate == _selectedDate) return;
+
     _selectedDate = newDate;
     notifyListeners();
-    await loadFoodLogs(uid: _currentUidOrThrow());
+
+    // Reload logs for the newly selected day.
+    await loadFoodLogs(uid: uid);
   }
 
   // ── Load ──────────────────────────────────────────────────────────────────
@@ -179,29 +187,21 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final logDate = isToday
-          ? DateTime.now()
-          : DateTime(
-              _selectedDate.year,
-              _selectedDate.month,
-              _selectedDate.day,
-              12,
-            );
-
+      final foodLogDate = _selectedDate;
       final log = FoodLogModel(
         foodLogID: '',
         foodLogName: foodName.trim(),
         calorieIntake: int.tryParse(calories.trim()) ?? 0,
         userId: uid,
-        foodLogDate: logDate,
+        foodLogDate: foodLogDate,
+        loggedAt: DateTime.now(), // wall-clock time of the actual log action
+        protein: protein,
+        carbs: carbs,
+        fats: fat,
       );
-      log.protein = protein;
-      log.carbs = carbs;
-      log.fats = fat;
 
       await _foodLogRepo.addFoodLog(uid, log);
 
-      // Mutate in memory — no Firestore re-fetch (Bug #18 fix)
       _foodLogs.add(log);
       successMessage = '${foodName.trim()} added to diary';
       clearForm();
@@ -241,7 +241,6 @@ class FoodLogViewModel extends ChangeNotifier {
 
       await _foodLogRepo.updateFoodLog(uid, existing);
 
-      // Update in memory — no Firestore re-fetch (Bug #18 fix)
       final idx = _foodLogs.indexWhere(
         (l) => l.foodLogID == existing.foodLogID,
       );
@@ -285,17 +284,5 @@ class FoodLogViewModel extends ChangeNotifier {
     isLoading = false;
     notifyListeners();
     return true;
-  }
-
-  // ── Private helpers ───────────────────────────────────────────────────────
-
-  /// Guard used by selectDate — uid must be passed in from outside since
-  /// ViewModels never read FirebaseAuth directly.
-  /// Call loadFoodLogs(uid: ...) directly from Views/other VMs instead.
-  String _currentUidOrThrow() {
-    throw StateError(
-      'selectDate requires uid — call loadFoodLogs(uid: uid) directly '
-      'or pass uid into selectDate(date, uid: uid).',
-    );
   }
 }

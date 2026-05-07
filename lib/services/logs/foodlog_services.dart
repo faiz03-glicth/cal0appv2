@@ -6,7 +6,6 @@ class FoodLogService {
   final _db = FirebaseFirestore.instance;
   final _uuid = const Uuid();
 
-  // collection path per user: users/{userId}/foodLogs/{foodLogId}
   CollectionReference _col(String userId) =>
       _db.collection('users').doc(userId).collection('foodLogs');
 
@@ -20,6 +19,8 @@ class FoodLogService {
 
   // READ — today's logs ───────────────────────────────────────────────────
   Future<List<FoodLogModel>> getFoodLogs(String userId, DateTime date) async {
+    final dayStart = DateTime(date.year, date.month, date.day);
+    final dayEnd = DateTime(date.year, date.month, date.day + 1);
     final start = Timestamp.fromDate(DateTime(date.year, date.month, date.day));
     final end = Timestamp.fromDate(
       DateTime(date.year, date.month, date.day + 1),

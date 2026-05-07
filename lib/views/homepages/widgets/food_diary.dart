@@ -56,14 +56,14 @@ class FoodDiary extends StatelessWidget {
                   color: c.textPrimary,
                 ),
               ),
-              TextButton.icon(
-                onPressed: () => _openAddSheet(context),
-                icon: Icon(Icons.add, size: 16, color: c.primary),
-                label: Text(
-                  'Add',
-                  style: TextStyle(color: c.primary, fontSize: 13),
-                ),
-              ),
+              // TextButton.icon(
+              //   onPressed: () => _openAddSheet(context),
+              //   icon: Icon(Icons.add, size: 16, color: c.primary),
+              //   label: Text(
+              //     'Add',
+              //     style: TextStyle(color: c.primary, fontSize: 13),
+              //   ),
+              // ),
             ],
           ),
 

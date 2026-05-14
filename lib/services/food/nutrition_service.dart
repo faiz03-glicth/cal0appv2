@@ -4,43 +4,37 @@ import 'package:http/http.dart' as http;
 import 'package:cal0appv2/services/users/nutrition_cache_service.dart';
 
 class NutritionService {
-  Future<Map<String, String>> _buildHeaders() async {
-    final apiKey = await SecureConfig.apiKey;
+  // Now synchronous — no storage read on every call
+  Map<String, String> _buildHeaders() {
     return {
-      'X-API-Key': apiKey,
+      'X-API-Key': SecureConfig.apiKey,
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
   }
 
-  Future<String> _getBaseUrl() => SecureConfig.baseUrl;
-
+  String get _baseUrl => SecureConfig.baseUrl;
+  // Future<String> _getBaseUrl() => SecureConfig.baseUrl;
   // ── Search — cache first, then network ───────────────────────────────────
   Future<List<Map<String, dynamic>>> searchFood(String query) async {
     if (query.trim().isEmpty) return [];
 
-    // 1. Check cache first
     final cached = await NutritionCacheService.getSearch(query);
-    if (cached != null) return cached; // ✅ instant from cache
+    if (cached != null) return cached;
 
-    // 2. Cache miss — fetch from API
     try {
-      final headers = await _buildHeaders();
-      final baseUrl = await _getBaseUrl();
       final uri = Uri.parse(
-        '$baseUrl/api/v1/foods/search?q=${Uri.encodeComponent(query)}',
+        '$_baseUrl/api/v1/foods/search?q=${Uri.encodeComponent(query)}',
       );
-
       final res = await http
-          .get(uri, headers: headers)
+          .get(uri, headers: _buildHeaders()) // synchronous now
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final list = data['data'] ?? data['foods'] ?? data['results'] ?? [];
-        final results = List<Map<String, dynamic>>.from(list);
-
-        // 3. Save to cache for next time
+        final results = List<Map<String, dynamic>>.from(
+          data['data'] ?? data['foods'] ?? data['results'] ?? [],
+        );
         await NutritionCacheService.saveSearch(query, results);
         return results;
       }
@@ -50,20 +44,14 @@ class NutritionService {
     }
   }
 
-  // ── Get categories — cache first ──────────────────────────────────────────
   Future<List<String>> getCategories() async {
-    // 1. Check cache
     final cached = await NutritionCacheService.getCategories();
     if (cached != null) return cached;
 
-    // 2. Fetch from API
     try {
-      final headers = await _buildHeaders();
-      final baseUrl = await _getBaseUrl();
-      final uri = Uri.parse('$baseUrl/api/v1/categories');
-
+      final uri = Uri.parse('$_baseUrl/api/v1/categories');
       final res = await http
-          .get(uri, headers: headers)
+          .get(uri, headers: _buildHeaders())
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
@@ -72,8 +60,6 @@ class NutritionService {
         final categories = List<String>.from(
           list.map((c) => c['name']?.toString() ?? c.toString()),
         );
-
-        // 3. Save to cache
         await NutritionCacheService.saveCategories(categories);
         return categories;
       }
@@ -86,12 +72,9 @@ class NutritionService {
   // ── Get food by ID — no cache needed (rarely called) ─────────────────────
   Future<Map<String, dynamic>?> getFoodById(String id) async {
     try {
-      final headers = await _buildHeaders();
-      final baseUrl = await _getBaseUrl();
-      final uri = Uri.parse('$baseUrl/api/v1/foods/$id');
-
+      final uri = Uri.parse('$_baseUrl/api/v1/foods/$id');
       final res = await http
-          .get(uri, headers: headers)
+          .get(uri, headers: _buildHeaders())
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
@@ -112,20 +95,18 @@ class NutritionService {
     if (cached != null) return cached;
 
     try {
-      final headers = await _buildHeaders();
-      final baseUrl = await _getBaseUrl();
       final uri = Uri.parse(
-        '$baseUrl/api/v1/halal/search?q=${Uri.encodeComponent(query)}',
+        '$_baseUrl/api/v1/halal/search?q=${Uri.encodeComponent(query)}',
       );
-
       final res = await http
-          .get(uri, headers: headers)
+          .get(uri, headers: _buildHeaders())
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final list = data['data'] ?? data['foods'] ?? [];
-        final results = List<Map<String, dynamic>>.from(list);
+        final results = List<Map<String, dynamic>>.from(
+          data['data'] ?? data['foods'] ?? [],
+        );
         await NutritionCacheService.saveSearch('halal_$query', results);
         return results;
       }
@@ -146,21 +127,19 @@ class NutritionService {
     if (cached != null) return cached;
 
     try {
-      final headers = await _buildHeaders();
-      final baseUrl = await _getBaseUrl();
       final uri = Uri.parse(
-        '$baseUrl/api/v1/foods?category=${Uri.encodeComponent(category)}'
+        '$_baseUrl/api/v1/foods?category=${Uri.encodeComponent(category)}'
         '&limit=$limit&offset=$offset',
       );
-
       final res = await http
-          .get(uri, headers: headers)
+          .get(uri, headers: _buildHeaders())
           .timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        final list = data['data'] ?? data['foods'] ?? [];
-        final results = List<Map<String, dynamic>>.from(list);
+        final results = List<Map<String, dynamic>>.from(
+          data['data'] ?? data['foods'] ?? [],
+        );
         await NutritionCacheService.saveSearch(cacheKey, results);
         return results;
       }

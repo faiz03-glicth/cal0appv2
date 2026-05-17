@@ -17,8 +17,6 @@ class SecureConfig {
   static String _cachedApiKey = '';
   static String _cachedBaseUrl = 'https://api.kalori-api.my';
 
-  /// Called once in main.dart before runApp.
-  /// Loads from .env in debug, reads from secure storage in release.
   static Future<void> init() async {
     final apiKey = dotenv.env['ACTIVATE_API_KEY'] ?? '';
     final baseUrl = dotenv.env['FOOD_API_URL'] ?? 'https://api.kalori-api.my';

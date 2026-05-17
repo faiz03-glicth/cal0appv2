@@ -64,14 +64,14 @@ class ScanTab extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Loading
-            if (vm.isScanning)
+            if (vm.isAnalyzing)
               Center(
                 child: Column(
                   children: [
                     CircularProgressIndicator(color: c.primary),
                     const SizedBox(height: 12),
                     Text(
-                      'Scanning label...',
+                      'Analyzing ingredients...',
                       style: TextStyle(color: c.textSecondary),
                     ),
                   ],
@@ -120,9 +120,7 @@ class ScanTab extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        vm.hasSuspiciousIngredients
-                            ? 'Potential amino spiking detected!'
-                            : 'No suspicious ingredients found.',
+                        vm.verdictLabel,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: vm.hasSuspiciousIngredients

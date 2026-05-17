@@ -1,11 +1,16 @@
 import 'dart:convert';
 import '../auth/secure_config.dart';
 import 'package:http/http.dart' as http;
+import 'package:cal0appv2/services/logs/debuglog_services.dart';
 import 'package:cal0appv2/services/users/nutrition_cache_service.dart';
 
 class NutritionService {
-  // Now synchronous — no storage read on every call
   Map<String, String> _buildHeaders() {
+    final key = SecureConfig.apiKey;
+    LogService.info(
+      'NutritionService: apiKey is ${key.isEmpty ? "EMPTY" : "set (${key.length} chars)"}',
+    );
+    LogService.info('NutritionService: baseUrl = ${SecureConfig.baseUrl}');
     return {
       'X-API-Key': SecureConfig.apiKey,
       'Content-Type': 'application/json',
@@ -19,6 +24,8 @@ class NutritionService {
   Future<List<Map<String, dynamic>>> searchFood(String query) async {
     if (query.trim().isEmpty) return [];
 
+    LogService.info('searchFood: query="$query"');
+
     final cached = await NutritionCacheService.getSearch(query);
     if (cached != null) return cached;
 
@@ -26,20 +33,32 @@ class NutritionService {
       final uri = Uri.parse(
         '$_baseUrl/api/v1/foods/search?q=${Uri.encodeComponent(query)}',
       );
+      LogService.info('searchFood: GET $uri');
       final res = await http
-          .get(uri, headers: _buildHeaders()) // synchronous now
+          .get(uri, headers: _buildHeaders())
           .timeout(const Duration(seconds: 10));
+
+      LogService.info('searchFood: status=${res.statusCode}');
+      LogService.info(
+        'searchFood: body preview=${res.body.substring(0, res.body.length.clamp(0, 300))}',
+      );
 
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final results = List<Map<String, dynamic>>.from(
           data['data'] ?? data['foods'] ?? data['results'] ?? [],
         );
+        LogService.info('searchFood: parsed ${results.length} results');
         await NutritionCacheService.saveSearch(query, results);
         return results;
       }
+      LogService.error(
+        'searchFood: non-200 status ${res.statusCode}',
+        res.body,
+      );
       return [];
-    } catch (e) {
+    } catch (e, stack) {
+      LogService.error('searchFood: exception', e, stack);
       return [];
     }
   }

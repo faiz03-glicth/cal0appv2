@@ -6,11 +6,9 @@ import 'services/auth/secure_config.dart';
 import 'services/firebase/firebase_options.dart';
 import '/../viewModels/scan/scan_viewmodel.dart';
 import 'viewModels/viewauth/auth_viewmodel.dart';
-import 'services/firebase/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'viewModels/usermodel/user_viewmodel.dart';
 import '/../services/logs/debuglog_services.dart';
-import '/../viewModels/theme/theme_viewmodel.dart';
 import '/../viewModels/theme/theme_viewmodel.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -42,7 +40,7 @@ void main() async {
     persistenceEnabled: true,
     cacheSizeBytes: 10485760,
   );
-  
+
   // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   try {
     await SecureConfig.init();

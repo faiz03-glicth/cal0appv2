@@ -1,11 +1,24 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+enum FoodLogSource { manual, scanned }
+
 class FoodLogModel {
   String _foodLogName, _foodLogID, _userId;
   int _calorieIntake;
   double _protein, _carbs, _fats;
 
   DateTime _foodLogDate, _loggedAt;
+
+  // ── Unified log metadata ──────────────────────────────────────────────────
+  FoodLogSource _source;
+  double? _servingSize;
+  String _servingUnit;
+  double _sugar, _sodium;
+
+  // Scan-specific (null for manual entries)
+  String? _imagePath;
+  double? _scanConfidence;
+  String? _scanAnalysisResult; // "CLEAN" | "SPIKED (92%)"
 
   FoodLogModel({
     required String foodLogID,
@@ -17,6 +30,14 @@ class FoodLogModel {
     double protein = 0,
     double carbs = 0,
     double fats = 0,
+    FoodLogSource source = FoodLogSource.manual,
+    double? servingSize,
+    String servingUnit = 'g',
+    double sugar = 0,
+    double sodium = 0,
+    String? imagePath,
+    double? scanConfidence,
+    String? scanAnalysisResult,
   }) : _foodLogID = foodLogID,
        _userId = userId,
        _foodLogName = foodLogName,
@@ -29,7 +50,15 @@ class FoodLogModel {
        _loggedAt = loggedAt ?? DateTime.now(),
        _protein = protein,
        _carbs = carbs,
-       _fats = fats;
+       _fats = fats,
+       _source = source,
+       _servingSize = servingSize,
+       _servingUnit = servingUnit,
+       _sugar = sugar,
+       _sodium = sodium,
+       _imagePath = imagePath,
+       _scanConfidence = scanConfidence,
+       _scanAnalysisResult = scanAnalysisResult;
 
   // Getters
   String get foodLogID => _foodLogID;
@@ -41,21 +70,32 @@ class FoodLogModel {
   double get protein => _protein;
   double get carbs => _carbs;
   double get fats => _fats;
+  FoodLogSource get source => _source;
+  double? get servingSize => _servingSize;
+  String get servingUnit => _servingUnit;
+  double get sugar => _sugar;
+  double get sodium => _sodium;
+  String? get imagePath => _imagePath;
+  double? get scanConfidence => _scanConfidence;
+  String? get scanAnalysisResult => _scanAnalysisResult;
+
+  bool get isScanned => _source == FoodLogSource.scanned;
+  bool get isManual => _source == FoodLogSource.manual;
 
   // Setters
-  set foodLogID(String value) => _foodLogID = value;
-  set userId(String value) => _userId = value;
-  set foodLogName(String value) => _foodLogName = value;
-  set calorieIntake(int value) => _calorieIntake = value;
+  set foodLogID(String v) => _foodLogID = v;
+  set userId(String v) => _userId = v;
+  set foodLogName(String v) => _foodLogName = v;
+  set calorieIntake(int v) => _calorieIntake = v;
   set foodLogDate(DateTime v) =>
       _foodLogDate = DateTime(v.year, v.month, v.day);
-  set protein(double value) => _protein = value;
-  set carbs(double value) => _carbs = value;
-  set fats(double value) => _fats = value;
+  set protein(double v) => _protein = v;
+  set carbs(double v) => _carbs = v;
+  set fats(double v) => _fats = v;
 
   static DateTime _parseDate(dynamic value) {
     if (value is Timestamp) return value.toDate();
-    if (value is String) return DateTime.parse(value);
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
     return DateTime.now();
   }
 
@@ -65,12 +105,20 @@ class FoodLogModel {
     foodLogName: map['foodLogName'] ?? '',
     calorieIntake: (map['calorieIntake'] as num?)?.toInt() ?? 0,
     foodLogDate: _parseDate(map['foodLogDate']),
-    loggedAt: _parseDate(
-      map['loggedAt'] ?? map['foodLogDate'],
-    ), //NEED TO ADD IN DOCUMENTATION
+    loggedAt: _parseDate(map['loggedAt'] ?? map['foodLogDate']),
     protein: (map['protein'] as num?)?.toDouble() ?? 0,
     carbs: (map['carbs'] as num?)?.toDouble() ?? 0,
     fats: (map['fats'] as num?)?.toDouble() ?? 0,
+    source: map['source'] == 'scanned'
+        ? FoodLogSource.scanned
+        : FoodLogSource.manual,
+    servingSize: (map['servingSize'] as num?)?.toDouble(),
+    servingUnit: map['servingUnit'] ?? 'g',
+    sugar: (map['sugar'] as num?)?.toDouble() ?? 0,
+    sodium: (map['sodium'] as num?)?.toDouble() ?? 0,
+    imagePath: map['imagePath'],
+    scanConfidence: (map['scanConfidence'] as num?)?.toDouble(),
+    scanAnalysisResult: map['scanAnalysisResult'],
   );
 
   Map<String, dynamic> toMap() => {
@@ -85,5 +133,13 @@ class FoodLogModel {
     'protein': _protein,
     'carbs': _carbs,
     'fats': _fats,
+    'source': _source == FoodLogSource.scanned ? 'scanned' : 'manual',
+    'servingSize': _servingSize,
+    'servingUnit': _servingUnit,
+    'sugar': _sugar,
+    'sodium': _sodium,
+    'imagePath': _imagePath,
+    'scanConfidence': _scanConfidence,
+    'scanAnalysisResult': _scanAnalysisResult,
   };
 }

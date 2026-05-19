@@ -3,8 +3,8 @@ import 'package:cal0appv2/models/foodlog_model.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
 import 'package:cal0appv2/repositories/nutrition_repository.dart';
 
-/// ViewModel for the food diary / food sheet.
-/// No Firebase, no services — only repositories.
+enum HistoryFilter { all, manual, scanned }
+
 class FoodLogViewModel extends ChangeNotifier {
   final FoodLogRepository _foodLogRepo;
   final NutritionRepository _nutritionRepo;
@@ -16,7 +16,6 @@ class FoodLogViewModel extends ChangeNotifier {
        _nutritionRepo = nutritionRepository ?? NutritionRepository();
 
   // ── Internal helpers ──────────────────────────────────────────────────────
-
   /// Strips time component — all date comparisons and storage use this.
   static DateTime _midnight(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 

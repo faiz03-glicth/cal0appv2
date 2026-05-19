@@ -18,36 +18,48 @@ class FoodLogService {
   }
 
   // READ — today's logs ───────────────────────────────────────────────────
+  /// Logs for a specific date (dashboard use)
   Future<List<FoodLogModel>> getFoodLogs(String userId, DateTime date) async {
-    final dayStart = DateTime(date.year, date.month, date.day);
-    final dayEnd = DateTime(date.year, date.month, date.day + 1);
     final start = Timestamp.fromDate(DateTime(date.year, date.month, date.day));
     final end = Timestamp.fromDate(
       DateTime(date.year, date.month, date.day + 1),
     );
-
     final snap = await _col(userId)
         .where('foodLogDate', isGreaterThanOrEqualTo: start)
         .where('foodLogDate', isLessThan: end)
-        .orderBy('foodLogDate', descending: false)
+        .orderBy('foodLogDate')
         .get();
-
     return snap.docs
         .map((d) => FoodLogModel.fromMap(d.data() as Map<String, dynamic>))
         .toList();
   }
 
-  Future<void> updateFoodLog(String userId, FoodLogModel log) => _db
-      .collection('users')
-      .doc(userId)
-      .collection('foodLogs')
-      .doc(log.foodLogID.toString())
-      .update(log.toMap());
+  //   final snap = await _col(userId)
+  //       .where('foodLogDate', isGreaterThanOrEqualTo: start)
+  //       .where('foodLogDate', isLessThan: end)
+  //       .orderBy('foodLogDate', descending: false)
+  //       .get();
 
-  Future<void> deleteFoodLog(String userId, String foodLogID) => _db
-      .collection('users')
-      .doc(userId)
-      .collection('foodLogs')
-      .doc(foodLogID.toString())
-      .delete();
+  //   return snap.docs
+  //       .map((d) => FoodLogModel.fromMap(d.data() as Map<String, dynamic>))
+  //       .toList();
+  // }
+
+  Future<List<FoodLogModel>> getAllFoodLogs(
+    String userId, {
+    int limit = 100,
+  }) async {
+    final snap = await _col(
+      userId,
+    ).orderBy('loggedAt', descending: true).limit(limit).get();
+    return snap.docs
+        .map((d) => FoodLogModel.fromMap(d.data() as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> updateFoodLog(String userId, FoodLogModel log) =>
+      _col(userId).doc(log.foodLogID).update(log.toMap());
+
+  Future<void> deleteFoodLog(String userId, String foodLogID) =>
+      _col(userId).doc(foodLogID).delete();
 }

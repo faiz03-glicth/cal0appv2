@@ -1,84 +1,85 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class ScanLogModel {
-  String _supplementId,
-      _userId,
-      _supplementName,
-      _brandName,
-      _scannedIngredients,
-      _analysisResult,
-      _flaggedIngredients,
-      _imagePath,
-      _barcode;
-  DateTime _scanTimestamp;
+  String supplementId,
+      userId,
+      supplementName,
+      brandName,
+      scannedIngredients,
+      analysisResult,
+      flaggedIngredients,
+      imagePath,
+      barcode,
+      servingUnit;
+  double protein, carbs, fat, sugar, sodium;
+  int calories;
+  double? servingSize;
+  DateTime scanTimestamp;
 
   ScanLogModel({
-    required String supplementId,
-    required String userId,
-    required String supplementName,
-    required String brandName,
-    required String scannedIngredients,
-    required String analysisResult,
-    required String flaggedIngredients,
-    required String imagePath,
-    required String barcode,
-    required DateTime scanTimestamp,
-  }) : _supplementId = supplementId,
-       _userId = userId,
-       _supplementName = supplementName,
-       _brandName = brandName,
-       _scannedIngredients = scannedIngredients,
-       _analysisResult = analysisResult,
-       _flaggedIngredients = flaggedIngredients,
-       _imagePath = imagePath,
-       _barcode = barcode,
-       _scanTimestamp = scanTimestamp;
+    required this.supplementId,
+    required this.userId,
+    required this.supplementName,
+    this.brandName = '',
+    this.scannedIngredients = '',
+    this.analysisResult = '',
+    this.flaggedIngredients = '',
+    this.imagePath = '',
+    this.barcode = '',
+    this.servingUnit = 'g',
+    this.protein = 0,
+    this.carbs = 0,
+    this.fat = 0,
+    this.sugar = 0,
+    this.sodium = 0,
+    this.calories = 0,
+    this.servingSize,
+    required this.scanTimestamp,
+  });
 
   // Getters
-  String get supplementId => _supplementId;
-  String get userId => _userId;
-  String get supplementName => _supplementName;
-  String get brandName => _brandName;
-  String get scannedIngredients => _scannedIngredients;
-  String get analysisResult => _analysisResult;
-  String get flaggedIngredients => _flaggedIngredients;
-  String get imagePath => _imagePath;
-  String get barcode => _barcode;
-  DateTime get scanTimestamp => _scanTimestamp;
-
-  // Setters
-  set supplementId(String value) => _supplementId = value;
-  set userId(String value) => _userId = value;
-  set supplementName(String value) => _supplementName = value;
-  set brandName(String value) => _brandName = value;
-  set scannedIngredients(String value) => _scannedIngredients = value;
-  set analysisResult(String value) => _analysisResult = value;
-  set flaggedIngredients(String value) => _flaggedIngredients = value;
-  set imagePath(String value) => _imagePath = value;
-  set barcode(String value) => _barcode = value;
-  set scanTimestamp(DateTime value) => _scanTimestamp = value;
-
-  factory ScanLogModel.fromMap(Map<String, dynamic> map) => ScanLogModel(
-    supplementId: map['supplementId'],
-    userId: map['userId'],
-    supplementName: map['supplementName'],
-    brandName: map['brandName'],
-    scannedIngredients: map['scannedIngredients'],
-    analysisResult: map['analysisResult'],
-    flaggedIngredients: map['flaggedIngredients'],
-    imagePath: map['imagePath'],
-    barcode: map['barcode'],
-    scanTimestamp: DateTime.parse(map['scanTimestamp']),
+  factory ScanLogModel.fromMap(Map<String, dynamic> m) => ScanLogModel(
+    supplementId: m['supplementId'] ?? '',
+    userId: m['userId'] ?? '',
+    supplementName: m['supplementName'] ?? '',
+    brandName: m['brandName'] ?? '',
+    scannedIngredients: m['scannedIngredients'] ?? '',
+    analysisResult: m['analysisResult'] ?? '',
+    flaggedIngredients: m['flaggedIngredients'] ?? '',
+    imagePath: m['imagePath'] ?? '',
+    barcode: m['barcode'] ?? '',
+    servingUnit: m['servingUnit'] ?? 'g',
+    protein: (m['protein'] as num?)?.toDouble() ?? 0,
+    carbs: (m['carbs'] as num?)?.toDouble() ?? 0,
+    fat: (m['fat'] as num?)?.toDouble() ?? 0,
+    sugar: (m['sugar'] as num?)?.toDouble() ?? 0,
+    sodium: (m['sodium'] as num?)?.toDouble() ?? 0,
+    calories: (m['calories'] as num?)?.toInt() ?? 0,
+    servingSize: (m['servingSize'] as num?)?.toDouble(),
+    scanTimestamp: m['scanTimestamp'] is Timestamp
+        ? (m['scanTimestamp'] as Timestamp).toDate()
+        : DateTime.tryParse(m['scanTimestamp']?.toString() ?? '') ??
+              DateTime.now(),
   );
 
   Map<String, dynamic> toMap() => {
-    'supplementId': _supplementId,
-    'userId': _userId,
-    'supplementName': _supplementName,
-    'brandName': _brandName,
-    'scannedIngredients': _scannedIngredients,
-    'analysisResult': _analysisResult,
-    'flaggedIngredients': _flaggedIngredients,
-    'imagePath': _imagePath,
-    'barcode': _barcode,
-    'scanTimestamp': _scanTimestamp.toIso8601String(),
+    'supplementId': supplementId,
+    'userId': userId,
+    'supplementName': supplementName,
+    'brandName': brandName,
+    'scannedIngredients': scannedIngredients,
+    'analysisResult': analysisResult,
+    'flaggedIngredients': flaggedIngredients,
+    'imagePath': imagePath,
+    'barcode': barcode,
+    'servingUnit': servingUnit,
+    'protein': protein,
+    'carbs': carbs,
+    'fat': fat,
+    'sugar': sugar,
+    'sodium': sodium,
+    'calories': calories,
+    'servingSize': servingSize,
+    'scanTimestamp': Timestamp.fromDate(scanTimestamp),
   };
 }

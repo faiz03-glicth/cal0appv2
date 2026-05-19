@@ -1,11 +1,15 @@
+// lib/views/homepages/widgets/food_diary.dart
+
 import 'package:intl/intl.dart';
-import '/../theme/app_theme.dart';
 import 'package:flutter/material.dart';
-import '/../models/foodlog_model.dart';
 import 'package:provider/provider.dart';
-import '/../views/homepages/widgets/food_sheet.dart';
-import '/../viewModels/foodlog/foodlog_viewmodel.dart';
-import '/../viewModels/viewauth/auth_viewmodel.dart';
+import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/models/foodlog_model.dart';
+import 'package:cal0appv2/views/foodlog/food_history_view.dart';
+import 'package:cal0appv2/views/homepages/widgets/food_sheet.dart';
+import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
+import 'package:cal0appv2/viewModels/foodlog/food_history_viewmodel.dart';
+import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 
 class FoodDiary extends StatelessWidget {
   const FoodDiary({super.key});
@@ -44,7 +48,7 @@ class FoodDiary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header ──────────────────────────────────────────────────────
+          // ── Header ────────────────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -56,18 +60,26 @@ class FoodDiary extends StatelessWidget {
                   color: c.textPrimary,
                 ),
               ),
-              // TextButton.icon(
-              //   onPressed: () => _openAddSheet(context),
-              //   icon: Icon(Icons.add, size: 16, color: c.primary),
-              //   label: Text(
-              //     'Add',
-              //     style: TextStyle(color: c.primary, fontSize: 13),
-              //   ),
-              // ),
+              TextButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChangeNotifierProvider(
+                      create: (_) => FoodHistoryViewModel(),
+                      child: const FoodHistoryView(),
+                    ),
+                  ),
+                ),
+                icon: Icon(Icons.history, size: 14, color: c.primary),
+                label: Text(
+                  'History',
+                  style: TextStyle(color: c.primary, fontSize: 13),
+                ),
+              ),
             ],
           ),
 
-          // ── Error banner ─────────────────────────────────────────────────
+          // ── Error banner ──────────────────────────────────────────────────
           if (vm.errorMessage != null)
             Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -83,7 +95,7 @@ class FoodDiary extends StatelessWidget {
               ),
             ),
 
-          // ── Content ──────────────────────────────────────────────────────
+          // ── Content ───────────────────────────────────────────────────────
           if (vm.isLoading)
             Center(
               child: Padding(
@@ -107,7 +119,7 @@ class FoodDiary extends StatelessWidget {
     );
   }
 
-  // ── Log item row ──────────────────────────────────────────────────────────
+  // ── Log item row ───────────────────────────────────────────────────────────
   Widget _buildItem(
     BuildContext context,
     FoodLogModel log,
@@ -121,31 +133,66 @@ class FoodDiary extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Icon
+          // Icon — different for scanned vs manual
           Container(
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: c.primary.withValues(alpha: 0.12),
+              color: log.isScanned
+                  ? c.primary.withValues(alpha: 0.12)
+                  : c.success.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(Icons.restaurant, size: 18, color: c.primary),
+            child: Icon(
+              log.isScanned ? Icons.qr_code_scanner : Icons.restaurant,
+              size: 18,
+              color: log.isScanned ? c.primary : c.success,
+            ),
           ),
           const SizedBox(width: 12),
-
-          // Name + macros
+          // Name + macros + source badge
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  log.foodLogName,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                    color: c.textPrimary,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        log.foodLogName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                          color: c.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // Source badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: log.isScanned
+                            ? c.primary.withValues(alpha: 0.1)
+                            : c.success.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        log.isScanned ? 'Scanned' : 'Manual',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: log.isScanned ? c.primary : c.success,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 2),
                 Text(
                   'P: ${log.protein.toStringAsFixed(1)}g  '
                   'C: ${log.carbs.toStringAsFixed(1)}g  '
@@ -207,11 +254,12 @@ class FoodDiary extends StatelessWidget {
     );
   }
 
-  // ── Empty state ───────────────────────────────────────────────────────────
+  // ── Empty state ────────────────────────────────────────────────────────────
   Widget _buildEmpty(C0Colors c, bool isToday, DateTime date) {
     final label = isToday
         ? 'No food logged today.\nTap + Add to start tracking!'
-        : 'No food logged on ${DateFormat('EEE, d MMM').format(date)}.\nTap + Add to fill it in.';
+        : 'No food logged on ${DateFormat('EEE, d MMM').format(date)}.\n'
+              'Tap + Add to fill it in.';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
@@ -239,12 +287,7 @@ class FoodDiary extends StatelessWidget {
     );
   }
 
-  // ── Sheet helpers ─────────────────────────────────────────────────────────
-  void _openAddSheet(BuildContext context) {
-    Provider.of<FoodLogViewModel>(context, listen: false).clearForm();
-    _openSheet(context, isEdit: false);
-  }
-
+  // ── Sheet helpers ──────────────────────────────────────────────────────────
   void _openEditSheet(BuildContext context, FoodLogModel log) {
     _openSheet(context, isEdit: true, existing: log);
   }

@@ -15,6 +15,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '/../viewModels/foodlog/foodlog_viewmodel.dart';
 import 'viewModels/dashboard/dashboard_viewmodel.dart';
 import '/../viewModels/viewauth/register_viewmodel.dart';
+import '/../viewModels/foodlog/food_history_viewmodel.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,6 +66,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => FoodLogViewModel()),
         ChangeNotifierProvider(create: (_) => ThemeViewModel()),
         ChangeNotifierProvider(create: (_) => ScanViewModel()),
+        ChangeNotifierProvider(create: (_) => FoodHistoryViewModel()),
       ],
       child: const MyApp(),
     ),

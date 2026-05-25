@@ -1,0 +1,88 @@
+// firestore.rules
+//
+// C0App — Firestore Security Rules
+//
+// Architecture:
+//   Users       → read/write their own data only
+//   Admins      → read-only everywhere (custom claim: admin == true)
+//   app_logs    → write-only for users (append-only event log)
+//                 read-only for admins
+//   admin_stats → write via Cloud Functions only (Admin SDK bypasses rules)
+//
+// How to set admin claim:
+//   Firebase Admin SDK (Node.js):
+//     admin.auth().setCustomUserClaims(uid, { admin: true });
+//   Or use the Firebase console > Functions to run a one-time script.
+//
+// How to deploy:
+//   firebase deploy --only firestore:rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+             request.auth.token.get('admin', false) == true;
+    }
+
+    // ── User profiles ──────────────────────────────────────────────────────
+
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+      allow read:        if isAdmin();
+      // Admins can NEVER write user data
+
+      // Food logs
+      match /foodLogs/{logId} {
+        allow read, write: if isOwner(uid);
+        allow read:        if isAdmin();
+      }
+
+      // Scan logs
+      match /scanLogs/{logId} {
+        allow read, write: if isOwner(uid);
+        allow read:        if isAdmin();
+      }
+    }
+
+    // ── Activity / debug logs ──────────────────────────────────────────────
+    // Users can only CREATE (append) — not read, update, or delete.
+    // Admins can read all. Nobody can update or delete (immutable log).
+
+    match /app_logs/{uid}/events/{logId} {
+      allow create: if isOwner(uid);
+      allow read:   if isAdmin();
+      allow update, delete: if false;  // Logs are immutable
+    }
+
+    // ── Aggregated stats (Cloud Functions only) ────────────────────────────
+
+    match /admin_stats/{docId} {
+      allow read:  if isAdmin();
+      allow write: if false;  // Only Firebase Admin SDK via Cloud Functions
+    }
+
+    // ── Admins collection (self-managed) ──────────────────────────────────
+
+    match /admins/{adminId} {
+      allow read, write: if isAdmin() && isOwner(adminId);
+    }
+
+    // ── Default: deny everything else ─────────────────────────────────────
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

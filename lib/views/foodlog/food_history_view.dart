@@ -1,4 +1,3 @@
-// lib/views/foodlog/food_history_view.dart
 import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
@@ -8,9 +7,13 @@ import 'package:cal0appv2/models/foodlog_model.dart';
 import 'package:cal0appv2/viewModels/foodlog/food_history_viewmodel.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 import 'package:cal0appv2/views/foodlog/food_detail_view.dart';
+import 'package:cal0appv2/views/widgets/app_card.dart';
+import 'package:cal0appv2/views/widgets/app_pill_chip.dart';
+import 'package:cal0appv2/views/widgets/source_badge.dart';
 
 class FoodHistoryView extends StatefulWidget {
   const FoodHistoryView({super.key});
+
   @override
   State<FoodHistoryView> createState() => _FoodHistoryViewState();
 }
@@ -51,30 +54,39 @@ class _FoodHistoryViewState extends State<FoodHistoryView> {
       ),
       body: Column(
         children: [
-          // ── Search + filter header ────────────────────────────────────────
+          // ── Search + filter header ──────────────────────────────────────
           Container(
             color: c.card,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              0,
+            ),
             child: Column(
               children: [
                 // Search bar
                 TextField(
                   controller: _searchCtrl,
                   onChanged: vm.setSearch,
-                  style: TextStyle(color: c.textPrimary, fontSize: 14),
+                  style: AppTextStyles.bodyCompact.copyWith(
+                    color: c.textPrimary,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Search food entries...',
-                    hintStyle: TextStyle(color: c.textSecondary, fontSize: 13),
+                    hintStyle: AppTextStyles.caption.copyWith(
+                      color: c.textSecondary,
+                    ),
                     prefixIcon: Icon(
                       Icons.search,
                       color: c.textSecondary,
-                      size: 18,
+                      size: AppSizes.smallIconSize,
                     ),
                     suffixIcon: _searchCtrl.text.isNotEmpty
                         ? IconButton(
                             icon: Icon(
                               Icons.clear,
-                              size: 16,
+                              size: AppSizes.miniIconSize + 2,
                               color: c.textSecondary,
                             ),
                             onPressed: () {
@@ -85,68 +97,75 @@ class _FoodHistoryViewState extends State<FoodHistoryView> {
                         : null,
                     filled: true,
                     fillColor: c.background,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.sm + 2,
+                    ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
                       borderSide: BorderSide.none,
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
                       borderSide: BorderSide(color: c.divider),
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
-
+                const SizedBox(height: AppSpacing.sm + 2),
                 // Filter chips
                 Row(
                   children: [
-                    _filterChip('All', HistoryFilter.all, vm, c),
-                    const SizedBox(width: 8),
-                    _filterChip(
-                      'Manual',
-                      HistoryFilter.manual,
-                      vm,
-                      c,
+                    AppPillChip(
+                      label: 'All',
+                      selected: vm.activeFilter == HistoryFilter.all,
+                      onTap: () => vm.setFilter(HistoryFilter.all),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    AppPillChip(
+                      label: 'Manual',
+                      selected: vm.activeFilter == HistoryFilter.manual,
+                      onTap: () => vm.setFilter(HistoryFilter.manual),
                       icon: Icons.edit,
                       count: vm.totalManual,
                     ),
-                    const SizedBox(width: 8),
-                    _filterChip(
-                      'Scanned',
-                      HistoryFilter.scanned,
-                      vm,
-                      c,
+                    const SizedBox(width: AppSpacing.sm),
+                    AppPillChip(
+                      label: 'Scanned',
+                      selected: vm.activeFilter == HistoryFilter.scanned,
+                      onTap: () => vm.setFilter(HistoryFilter.scanned),
                       icon: Icons.qr_code_scanner,
                       count: vm.totalScanned,
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
               ],
             ),
           ),
 
-          // ── List ──────────────────────────────────────────────────────────
+          // ── List ──────────────────────────────────────────────────────
           Expanded(
             child: vm.isLoading
                 ? Center(child: CircularProgressIndicator(color: c.primary))
                 : vm.filtered.isEmpty
-                ? _buildEmpty(vm, c)
+                ? _EmptyState(vm: vm)
                 : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.md,
+                      AppSpacing.lg,
+                      80,
+                    ),
                     itemCount: vm.filtered.length,
                     itemBuilder: (ctx, i) {
                       final log = vm.filtered[i];
-                      // Date separator
                       final showDate =
                           i == 0 ||
                           !_sameDay(vm.filtered[i - 1].loggedAt, log.loggedAt);
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (showDate) _dateSeparator(log.loggedAt, c),
-                          _buildCard(ctx, log, vm, c),
+                          if (showDate) _DateSeparator(date: log.loggedAt),
+                          _HistoryCard(log: log, vm: vm),
                         ],
                       );
                     },
@@ -157,14 +176,21 @@ class _FoodHistoryViewState extends State<FoodHistoryView> {
     );
   }
 
-  // ── Card ──────────────────────────────────────────────────────────────────
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+}
 
-  Widget _buildCard(
-    BuildContext context,
-    FoodLogModel log,
-    FoodHistoryViewModel vm,
-    C0Colors c,
-  ) {
+// ── Card ───────────────────────────────────────────────────────────────────
+
+class _HistoryCard extends StatelessWidget {
+  final FoodLogModel log;
+  final FoodHistoryViewModel vm;
+
+  const _HistoryCard({required this.log, required this.vm});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
@@ -175,376 +201,108 @@ class _FoodHistoryViewState extends State<FoodHistoryView> {
           ),
         ),
       ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: c.card,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
+      child: AppCard(
+        margin: const EdgeInsets.only(bottom: AppSpacing.sm + 2),
+        padding: EdgeInsets.zero,
         child: Row(
           children: [
-            // Left image/icon area
+            // Thumbnail
             ClipRRect(
               borderRadius: const BorderRadius.horizontal(
-                left: Radius.circular(16),
+                left: Radius.circular(AppRadius.xl),
               ),
-              child: _buildThumbnail(log, c),
+              child: _Thumbnail(log: log),
             ),
-
             // Content
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm + 2,
+                  AppSpacing.sm,
+                  AppSpacing.sm + 2,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Name + source badge
                     Row(
                       children: [
                         Expanded(
                           child: Text(
                             log.foodLogName,
-                            style: TextStyle(
+                            style: AppTextStyles.bodyCompact.copyWith(
                               fontWeight: FontWeight.w600,
-                              fontSize: 14,
                               color: c.textPrimary,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        _sourceBadge(log, c),
+                        const SizedBox(width: AppSpacing.xs + 2),
+                        SourceBadge(source: log.source),
                       ],
                     ),
-                    const SizedBox(height: 4),
-
-                    // Time
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       DateFormat('h:mm a').format(log.loggedAt),
-                      style: TextStyle(fontSize: 11, color: c.textSecondary),
+                      style: AppTextStyles.tiny.copyWith(
+                        color: c.textSecondary,
+                      ),
                     ),
-                    const SizedBox(height: 6),
-
+                    const SizedBox(height: AppSpacing.xs + 2),
                     // Macros compact row
                     Row(
                       children: [
-                        _miniMacro(
-                          '${log.calorieIntake}',
-                          'kcal',
-                          c.primary,
-                          c,
-                        ),
-                        const SizedBox(width: 10),
-                        _miniMacro(
+                        _MiniMacro('${log.calorieIntake}', 'kcal', c.primary),
+                        const SizedBox(width: AppSpacing.sm + 2),
+                        _MiniMacro(
                           '${log.protein.toStringAsFixed(1)}g',
                           'P',
                           c.success,
-                          c,
                         ),
-                        const SizedBox(width: 10),
-                        _miniMacro(
+                        const SizedBox(width: AppSpacing.sm + 2),
+                        _MiniMacro(
                           '${log.carbs.toStringAsFixed(1)}g',
                           'C',
-                          Colors.orange,
-                          c,
+                          C0Theme.macroCarbs,
                         ),
-                        const SizedBox(width: 10),
-                        _miniMacro(
+                        const SizedBox(width: AppSpacing.sm + 2),
+                        _MiniMacro(
                           '${log.fats.toStringAsFixed(1)}g',
                           'F',
                           c.slate,
-                          c,
                         ),
                       ],
                     ),
-
-                    // Scan-specific: AI result chip
                     if (log.isScanned && log.scanAnalysisResult != null) ...[
-                      const SizedBox(height: 6),
-                      _aiChip(log.scanAnalysisResult!, c),
+                      const SizedBox(height: AppSpacing.xs + 2),
+                      _AiChip(result: log.scanAnalysisResult!),
                     ],
                   ],
                 ),
               ),
             ),
-
             // Delete button
             IconButton(
               icon: Icon(
                 Icons.delete_outline,
-                size: 18,
+                size: AppSizes.smallIconSize,
                 color: c.textSecondary,
               ),
-              onPressed: () => _confirmDelete(context, log, vm, c),
+              onPressed: () => _confirmDelete(context, log, vm),
             ),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildThumbnail(FoodLogModel log, C0Colors c) {
-    if (log.isScanned && log.imagePath != null && log.imagePath!.isNotEmpty) {
-      return SizedBox(
-        width: 70,
-        height: 80,
-        child: Image.file(
-          File(log.imagePath!),
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _iconThumbnail(log, c),
-        ),
-      );
-    }
-    return _iconThumbnail(log, c);
-  }
-
-  Widget _iconThumbnail(FoodLogModel log, C0Colors c) => Container(
-    width: 70,
-    height: 80,
-    color: log.isScanned
-        ? c.primary.withOpacity(0.08)
-        : c.success.withOpacity(0.08),
-    child: Icon(
-      log.isScanned ? Icons.qr_code_scanner : Icons.restaurant,
-      color: log.isScanned ? c.primary : c.success,
-      size: 28,
-    ),
-  );
-
-  Widget _sourceBadge(FoodLogModel log, C0Colors c) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: log.isScanned
-          ? c.primary.withOpacity(0.1)
-          : c.success.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          log.isScanned ? Icons.qr_code_scanner : Icons.edit,
-          size: 10,
-          color: log.isScanned ? c.primary : c.success,
-        ),
-        const SizedBox(width: 3),
-        Text(
-          log.isScanned ? 'Scanned' : 'Manual',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: log.isScanned ? c.primary : c.success,
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _aiChip(String result, C0Colors c) {
-    final isSpiked = result.contains('SPIKED');
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: (isSpiked ? c.warning : c.success).withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isSpiked ? Icons.warning_amber : Icons.shield,
-            size: 10,
-            color: isSpiked ? c.warning : c.success,
-          ),
-          const SizedBox(width: 3),
-          Text(
-            result,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: isSpiked ? c.warning : c.success,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _miniMacro(String value, String label, Color color, C0Colors c) =>
-      RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(
-              text: value,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: color,
-              ),
-            ),
-            TextSpan(
-              text: ' $label',
-              style: TextStyle(fontSize: 10, color: c.textSecondary),
-            ),
-          ],
-        ),
-      );
-
-  // ── Date separator ────────────────────────────────────────────────────────
-
-  Widget _dateSeparator(DateTime date, C0Colors c) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final d = DateTime(date.year, date.month, date.day);
-    String label;
-    if (d == today)
-      label = 'Today';
-    else if (d == today.subtract(const Duration(days: 1)))
-      label = 'Yesterday';
-    else
-      label = DateFormat('EEEE, d MMM yyyy').format(date);
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 6),
-      child: Row(
-        children: [
-          Container(
-            width: 3,
-            height: 14,
-            decoration: BoxDecoration(
-              color: c.primary,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: c.textSecondary,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Filter chip ───────────────────────────────────────────────────────────
-
-  Widget _filterChip(
-    String label,
-    HistoryFilter filter,
-    FoodHistoryViewModel vm,
-    C0Colors c, {
-    IconData? icon,
-    int? count,
-  }) {
-    final active = vm.activeFilter == filter;
-    return GestureDetector(
-      onTap: () => vm.setFilter(filter),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: active ? c.primary : c.background,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: active ? c.primary : c.divider, width: 1),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(
-                icon,
-                size: 12,
-                color: active ? Colors.white : c.textSecondary,
-              ),
-              const SizedBox(width: 4),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: active ? Colors.white : c.textSecondary,
-              ),
-            ),
-            if (count != null && count > 0) ...[
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: active
-                      ? Colors.white.withOpacity(0.3)
-                      : c.primary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$count',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: active ? Colors.white : c.primary,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  Widget _buildEmpty(FoodHistoryViewModel vm, C0Colors c) => Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.history, size: 56, color: c.textSecondary),
-        const SizedBox(height: 12),
-        Text(
-          vm.searchQuery.isNotEmpty
-              ? 'No results for "${vm.searchQuery}"'
-              : vm.activeFilter == HistoryFilter.scanned
-              ? 'No scanned entries yet'
-              : vm.activeFilter == HistoryFilter.manual
-              ? 'No manual entries yet'
-              : 'No food history yet',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: c.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Start logging food to see history here',
-          style: TextStyle(color: c.textSecondary, fontSize: 13),
-        ),
-      ],
-    ),
-  );
 
   void _confirmDelete(
     BuildContext context,
     FoodLogModel log,
     FoodHistoryViewModel vm,
-    C0Colors c,
   ) {
+    final c = C0Theme.of(context);
     final uid = context.read<AuthViewModel>().currentUid ?? '';
     showDialog(
       context: context,
@@ -569,6 +327,217 @@ class _FoodHistoryViewState extends State<FoodHistoryView> {
               'Delete',
               style: TextStyle(color: c.warning, fontWeight: FontWeight.bold),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Thumbnail ──────────────────────────────────────────────────────────────
+
+class _Thumbnail extends StatelessWidget {
+  final FoodLogModel log;
+  const _Thumbnail({required this.log});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    if (log.isScanned && log.imagePath != null && log.imagePath!.isNotEmpty) {
+      return SizedBox(
+        width: 70,
+        height: 80,
+        child: Image.file(
+          File(log.imagePath!),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _IconThumbnail(log: log),
+        ),
+      );
+    }
+    return _IconThumbnail(log: log);
+  }
+}
+
+class _IconThumbnail extends StatelessWidget {
+  final FoodLogModel log;
+  const _IconThumbnail({required this.log});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    final color = log.isScanned ? c.primary : c.success;
+    return Container(
+      width: 70,
+      height: 80,
+      color: color.withValues(alpha: 0.08),
+      child: Icon(
+        log.isScanned ? Icons.qr_code_scanner : Icons.restaurant,
+        color: color,
+        size: 28,
+      ),
+    );
+  }
+}
+
+// ── AI chip ────────────────────────────────────────────────────────────────
+
+class _AiChip extends StatelessWidget {
+  final String result;
+  const _AiChip({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    final isSpiked = result.contains('SPIKED');
+    final color = isSpiked ? c.warning : c.success;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs + 2,
+        vertical: 2,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppSpacing.xs + 2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isSpiked ? Icons.warning_amber : Icons.shield,
+            size: AppSizes.miniIconSize,
+            color: color,
+          ),
+          const SizedBox(width: 3),
+          Text(
+            result,
+            style: AppTextStyles.micro.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Mini macro chip ────────────────────────────────────────────────────────
+
+class _MiniMacro extends StatelessWidget {
+  final String value;
+  final String label;
+  final Color color;
+  const _MiniMacro(this.value, this.label, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: value,
+            style: AppTextStyles.tiny.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          TextSpan(
+            text: ' $label',
+            style: AppTextStyles.micro.copyWith(color: c.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Date separator ─────────────────────────────────────────────────────────
+
+class _DateSeparator extends StatelessWidget {
+  final DateTime date;
+  const _DateSeparator({required this.date});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = DateTime(date.year, date.month, date.day);
+    final String label;
+    if (d == today) {
+      label = 'Today';
+    } else if (d == today.subtract(const Duration(days: 1))) {
+      label = 'Yesterday';
+    } else {
+      label = DateFormat('EEEE, d MMM yyyy').format(date);
+    }
+    return Padding(
+      padding: const EdgeInsets.only(
+        top: AppSpacing.sm,
+        bottom: AppSpacing.xs + 2,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 14,
+            decoration: BoxDecoration(
+              color: c.primary,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            label,
+            style: AppTextStyles.tiny.copyWith(
+              fontWeight: FontWeight.w700,
+              color: c.textSecondary,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Empty state ────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  final FoodHistoryViewModel vm;
+  const _EmptyState({required this.vm});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    final String msg;
+    if (vm.searchQuery.isNotEmpty) {
+      msg = 'No results for "${vm.searchQuery}"';
+    } else if (vm.activeFilter == HistoryFilter.scanned) {
+      msg = 'No scanned entries yet';
+    } else if (vm.activeFilter == HistoryFilter.manual) {
+      msg = 'No manual entries yet';
+    } else {
+      msg = 'No food history yet';
+    }
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.history, size: 56, color: c.textSecondary),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            msg,
+            style: AppTextStyles.body.copyWith(
+              fontWeight: FontWeight.w600,
+              color: c.textPrimary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs + 2),
+          Text(
+            'Start logging food to see history here',
+            style: AppTextStyles.caption.copyWith(color: c.textSecondary),
           ),
         ],
       ),

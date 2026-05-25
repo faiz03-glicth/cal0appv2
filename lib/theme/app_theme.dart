@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
+export 'app_dimensions.dart';
+export 'app_text_styles.dart';
+
 class C0Theme {
+  // ── Palette ────────────────────────────────────────────────────────────
   static const Color sageGreen = Color(0xFF789682);
   static const Color deepSage = Color(0xFF4F6355);
   static const Color mintyFresh = Color(0xFFB2D8C1);
@@ -15,12 +19,26 @@ class C0Theme {
   static const Color successGreen = Color(0xFF8BB381);
   static const Color warningRed = Color(0xFFD67A7A);
 
+  // ── Semantic accent palette (formerly hardcoded in views) ──────────────
+  static const Color riskCritical = Color(0xFFFF1744);
+  static const Color riskHigh = Color(0xFFFF6D00);
+  static const Color riskModerate = Color(0xFFFFAB00);
+  static const Color riskLow = Color(0xFF00BFA5);
+  static const Color accentOrange = Color(0xFFFF6D00);
+  static const Color accentPurple = Color(0xFFFFAB00);
+  static const Color macroCarbs = Colors.orange;
+  static const Color macroSugar = Colors.pink;
+  static const Color macroSodium = Colors.deepPurple;
+
+  // ── Form border ────────────────────────────────────────────────────────
+  static const Color formBorder = Color(0xFFDDDDD8);
+
   static C0Colors of(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return C0Colors(isDark: isDark);
   }
 
-  // --- Light Mode ---
+  // ── ThemeData ──────────────────────────────────────────────────────────
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
@@ -47,7 +65,6 @@ class C0Theme {
     ),
   );
 
-  // --- Dark Mode ---
   static ThemeData darkTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
@@ -90,7 +107,11 @@ class C0Colors {
   Color get track =>
       isDark ? Colors.white12 : C0Theme.sageGreen.withValues(alpha: 0.2);
   Color get divider => isDark ? Colors.white12 : C0Theme.lightWarmGrey;
+  Color get formBorder => isDark ? Colors.white12 : C0Theme.formBorder;
   Color get success => C0Theme.successGreen;
   Color get warning => C0Theme.warningRed;
   Color get slate => C0Theme.slateGrey;
+
+  // Field fill: tinted background that contrasts the card it sits on.
+  Color get fieldFill => isDark ? C0Theme.charcoal : Colors.white;
 }

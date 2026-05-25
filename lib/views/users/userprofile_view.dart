@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cal0appv2/views/homepages/widgets/c0_app_bar.dart';
+import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/widgets/c0_app_bar.dart';
 import 'package:cal0appv2/viewModels/usermodel/user_viewmodel.dart';
-// 👆 removed unused ThemeViewModel import
+import 'package:cal0appv2/viewModels/theme/theme_viewmodel.dart';
+import 'package:cal0appv2/viewModels/health/health_warning_viewmodel.dart';
+import 'package:cal0appv2/models/health/health_condition.dart';
+import 'package:cal0appv2/views/widgets/app_text_field.dart';
+import 'package:cal0appv2/views/widgets/app_dropdown.dart';
+import 'package:cal0appv2/views/widgets/app_primary_button.dart';
+import 'package:cal0appv2/views/widgets/app_message_banner.dart';
+import 'package:cal0appv2/views/widgets/app_section_title.dart';
+import 'package:cal0appv2/views/widgets/app_card.dart';
 
 class UserProfileView extends StatefulWidget {
   const UserProfileView({super.key});
-
   @override
   State<UserProfileView> createState() => _UserProfileViewState();
 }
@@ -20,20 +27,23 @@ class _UserProfileViewState extends State<UserProfileView> {
   final _weight = TextEditingController();
   final _height = TextEditingController();
   final _password = TextEditingController();
+
   String _gender = 'male';
   String _goal = 'maintain';
   String _activityLevel = 'moderately active';
   DateTime _birthday = DateTime(2000);
+  final Set<HealthCondition> _conditions = {};
 
   @override
   void initState() {
     super.initState();
-    final userId = FirebaseAuth.instance.currentUser!.uid;
     Future.microtask(() async {
-      final vm = Provider.of<UserViewModel>(context, listen: false);
-      await vm.loadUser(userId);
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+      if (uid.isEmpty || !mounted) return;
+      final vm = context.read<UserViewModel>();
+      await vm.loadUser(uid);
       final u = vm.user;
-      if (u != null) {
+      if (u != null && mounted) {
         _userName.text = u.userName;
         _userEmail.text = u.userEmail;
         _weight.text = u.weight.toString();
@@ -43,7 +53,9 @@ class _UserProfileViewState extends State<UserProfileView> {
           _goal = u.goal;
           _activityLevel = u.activityLevel;
           _birthday = u.birthday;
-          // _birthday = u.birthday ?? DateTime(2000);
+          _conditions
+            ..clear()
+            ..addAll(u.healthConditions);
         });
       }
     });
@@ -59,10 +71,11 @@ class _UserProfileViewState extends State<UserProfileView> {
     super.dispose();
   }
 
-  Future<void> _saveProfile(UserViewModel vm) async {
+  Future<void> _save(UserViewModel vm) async {
     if (!_formKey.currentState!.validate()) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     await vm.updateProfile(
-      userId: FirebaseAuth.instance.currentUser!.uid,
+      userId: uid,
       userName: _userName.text,
       userEmail: _userEmail.text,
       gender: _gender,
@@ -71,13 +84,11 @@ class _UserProfileViewState extends State<UserProfileView> {
       birthday: _birthday,
       weight: double.tryParse(_weight.text) ?? 0,
       height: double.tryParse(_height.text) ?? 0,
+      healthConditions: _conditions.toList(),
     );
-    if (vm.successMessage != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(vm.successMessage!),
-          backgroundColor: C0Theme.successGreen,
-        ),
+    if (mounted) {
+      context.read<HealthWarningViewModel>().updateConditions(
+        _conditions.toList(),
       );
     }
   }
@@ -86,7 +97,7 @@ class _UserProfileViewState extends State<UserProfileView> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _birthday,
-      firstDate: DateTime(1900),
+      firstDate: DateTime(1920),
       lastDate: DateTime.now(),
     );
     if (picked != null) setState(() => _birthday = picked);
@@ -94,16 +105,17 @@ class _UserProfileViewState extends State<UserProfileView> {
 
   @override
   Widget build(BuildContext context) {
-    final vm = Provider.of<UserViewModel>(context);
+    final vm = context.watch<UserViewModel>();
+    final themeVm = context.watch<ThemeViewModel>();
     final c = C0Theme.of(context);
 
     return Scaffold(
-      appBar: C0AppBar(title: 'My Profile', showBack: false),
+      appBar: C0AppBar(title: 'My Profile'),
       backgroundColor: c.background,
       body: vm.isLoading
           ? Center(child: CircularProgressIndicator(color: c.primary))
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -112,138 +124,187 @@ class _UserProfileViewState extends State<UserProfileView> {
                     // Avatar
                     Center(
                       child: CircleAvatar(
-                        radius: 48,
+                        radius: 36,
                         backgroundColor: c.primary,
                         child: Text(
                           _userName.text.isNotEmpty
                               ? _userName.text[0].toUpperCase()
                               : '?',
-                          style: const TextStyle(
-                            fontSize: 36,
+                          style: AppTextStyles.heading.copyWith(
                             color: Colors.white,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: AppSpacing.xxl),
 
-                    // Banners
-                    if (vm.errorMessage != null)
-                      _buildBanner(vm.errorMessage!, c.warning),
-                    if (vm.successMessage != null)
-                      _buildBanner(vm.successMessage!, c.success),
+                    if (vm.errorMessage != null) ...[
+                      AppMessageBanner.error(message: vm.errorMessage!),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
+                    if (vm.successMessage != null) ...[
+                      AppMessageBanner.success(message: vm.successMessage!),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
 
-                    // Account info
-                    _sectionTitle('Account Info', c),
-                    _buildTextField(
-                      _userName,
-                      'Username',
-                      Icons.person,
-                      c,
-                      validator: (v) =>
-                          v!.isEmpty ? 'Username is required' : null,
+                    // ── App Settings (dark mode lives here now) ────────
+                    const AppSectionTitle(title: 'App Settings'),
+                    AppCard(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                        vertical: AppSpacing.sm,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            themeVm.isDark ? Icons.dark_mode : Icons.light_mode,
+                            color: themeVm.isDark ? Colors.amber : c.primary,
+                            size: 22,
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Text(
+                              themeVm.isDark ? 'Dark Mode' : 'Light Mode',
+                              style: AppTextStyles.body.copyWith(
+                                fontWeight: FontWeight.w500,
+                                color: c.textPrimary,
+                              ),
+                            ),
+                          ),
+                          Switch(
+                            value: themeVm.isDark,
+                            onChanged: (_) => themeVm.toggleTheme(),
+                            activeThumbColor: c.primary,
+                            activeTrackColor: c.track,
+                          ),
+                        ],
+                      ),
                     ),
-                    _buildTextField(
-                      _userEmail,
-                      'Email',
-                      Icons.email,
-                      c,
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ── Account info ───────────────────────────────────
+                    const AppSectionTitle(title: 'Account Info'),
+                    AppTextField(
+                      controller: _userName,
+                      label: 'Username',
+                      hint: 'Your name',
+                      icon: Icons.person,
+                      validator: (v) => v!.isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    AppTextField(
+                      controller: _userEmail,
+                      label: 'Email',
+                      hint: 'Email address',
+                      icon: Icons.email,
+                      keyboardType: TextInputType.emailAddress,
                       validator: (v) =>
                           !v!.contains('@') ? 'Invalid email' : null,
                     ),
 
-                    // Body info
-                    _sectionTitle('Body Info', c),
+                    // ── Body info ──────────────────────────────────────
+                    const AppSectionTitle(title: 'Body Info'),
                     Row(
                       children: [
                         Expanded(
-                          child: _buildTextField(
-                            _weight,
-                            'Weight (kg)',
-                            Icons.monitor_weight,
-                            c,
+                          child: AppTextField(
+                            controller: _weight,
+                            label: 'Weight (kg)',
+                            hint: 'kg',
+                            icon: Icons.monitor_weight,
                             isNumber: true,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: AppSpacing.md),
                         Expanded(
-                          child: _buildTextField(
-                            _height,
-                            'Height (cm)',
-                            Icons.height,
-                            c,
+                          child: AppTextField(
+                            controller: _height,
+                            label: 'Height (cm)',
+                            hint: 'cm',
+                            icon: Icons.height,
                             isNumber: true,
                           ),
                         ),
                       ],
                     ),
-
-                    // Birthday
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     ListTile(
                       tileColor: c.card,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(AppRadius.md),
                       ),
                       leading: Icon(Icons.cake, color: c.primary),
                       title: Text(
                         'Birthday',
-                        style: TextStyle(color: c.textPrimary),
+                        style: AppTextStyles.body.copyWith(
+                          color: c.textPrimary,
+                        ),
                       ),
                       subtitle: Text(
                         '${_birthday.day}/${_birthday.month}/${_birthday.year}',
-                        style: TextStyle(color: c.textSecondary),
+                        style: AppTextStyles.caption.copyWith(
+                          color: c.textSecondary,
+                        ),
                       ),
                       onTap: _pickBirthday,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
 
-                    // Preferences
-                    _sectionTitle('Preferences', c),
-                    _buildDropdown(
-                      'Gender',
-                      _gender,
-                      ['male', 'female'],
-                      (v) => setState(() => _gender = v!),
-                      c,
+                    // ── Preferences ────────────────────────────────────
+                    const AppSectionTitle(title: 'Preferences'),
+                    AppDropdown(
+                      label: 'Gender',
+                      value: _gender,
+                      items: const ['male', 'female'],
+                      onChanged: (v) => setState(() => _gender = v!),
                     ),
-                    _buildDropdown(
-                      'Goal',
-                      _goal,
-                      [
+                    const SizedBox(height: AppSpacing.md),
+                    AppDropdown(
+                      label: 'Goal',
+                      value: _goal,
+                      items: const [
                         'maintain',
                         'lose weight',
                         'lose weight fast',
                         'gain weight',
                         'gain weight fast',
                       ],
-                      (v) => setState(() => _goal = v!),
-                      c,
+                      onChanged: (v) => setState(() => _goal = v!),
                     ),
-                    _buildDropdown(
-                      'Activity Level',
-                      _activityLevel,
-                      [
+                    const SizedBox(height: AppSpacing.md),
+                    AppDropdown(
+                      label: 'Activity Level',
+                      value: _activityLevel,
+                      items: const [
                         'sedentary',
                         'lightly active',
                         'moderately active',
                         'very active',
                         'extra active',
                       ],
-                      (v) => setState(() => _activityLevel = v!),
-                      c,
+                      onChanged: (v) => setState(() => _activityLevel = v!),
                     ),
 
-                    // Change password
-                    _sectionTitle('Change Password', c),
-                    _buildTextField(
-                      _password,
-                      'New Password',
-                      Icons.lock,
-                      c,
+                    // ── Health conditions ──────────────────────────────
+                    _HealthConditionsSection(
+                      selected: _conditions,
+                      onToggle: (cond) => setState(() {
+                        _conditions.contains(cond)
+                            ? _conditions.remove(cond)
+                            : _conditions.add(cond);
+                      }),
+                    ),
+
+                    // ── Password ───────────────────────────────────────
+                    const AppSectionTitle(title: 'Change Password'),
+                    AppTextField(
+                      controller: _password,
+                      label: 'New Password',
+                      hint: 'Leave blank to keep current',
+                      icon: Icons.lock,
                       obscure: true,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpacing.sm),
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
@@ -251,7 +312,7 @@ class _UserProfileViewState extends State<UserProfileView> {
                           side: BorderSide(color: c.primary),
                           foregroundColor: c.primary,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
                           ),
                         ),
                         onPressed: _password.text.isNotEmpty
@@ -264,155 +325,152 @@ class _UserProfileViewState extends State<UserProfileView> {
                       ),
                     ),
 
-                    const SizedBox(height: 24),
-
-                    // Save button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: c.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () => _saveProfile(vm),
-                        child: const Text(
-                          'Save Profile',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    AppPrimaryButton(
+                      label: 'Save Profile',
+                      isLoading: vm.isLoading,
+                      onPressed: () => _save(vm),
                     ),
-                    const SizedBox(height: 30),
+                    const SizedBox(height: AppSpacing.xxxl),
                   ],
                 ),
               ),
             ),
     );
   }
+}
 
-  Widget _sectionTitle(String title, C0Colors c) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 12),
-    child: Text(
-      title,
-      style: TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.bold,
-        color: c.primary,
-      ),
-    ),
-  );
+// ── Health conditions section ─────────────────────────────────────────────────
 
-  Widget _buildBanner(String message, Color color) => Container(
-    width: double.infinity,
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: color),
-    ),
-    child: Text(message, style: TextStyle(color: color)),
-  );
+class _HealthConditionsSection extends StatelessWidget {
+  final Set<HealthCondition> selected;
+  final ValueChanged<HealthCondition> onToggle;
+  const _HealthConditionsSection({
+    required this.selected,
+    required this.onToggle,
+  });
 
-  Widget _buildTextField(
-    TextEditingController controller,
-    String label,
-    IconData icon,
-    C0Colors c, {
-    bool obscure = false,
-    bool isNumber = false,
-    String? Function(String?)? validator,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      validator: validator,
-      style: TextStyle(color: c.textPrimary, fontSize: 15),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: c.textSecondary),
-        prefixIcon: Icon(icon, color: c.primary),
-        filled: true,
-        fillColor: c.card,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: c.textSecondary.withOpacity(0.3),
-            width: 1,
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const AppSectionTitle(title: 'Health Conditions'),
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: c.primary.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: c.primary.withValues(alpha: 0.18)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.health_and_safety_outlined,
+                color: c.primary,
+                size: AppSizes.smallIconSize,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Select conditions to receive personalised food warnings before logging.',
+                  style: AppTextStyles.caption.copyWith(
+                    color: c.textPrimary,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: c.primary, width: 1.5),
+        const SizedBox(height: AppSpacing.md),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: HealthCondition.values
+              .map(
+                (cond) => GestureDetector(
+                  onTap: () => onToggle(cond),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.xs + 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected.contains(cond) ? c.primary : c.fieldFill,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                      border: Border.all(
+                        color: selected.contains(cond)
+                            ? c.primary
+                            : c.formBorder,
+                        width: selected.contains(cond) ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (selected.contains(cond)) ...[
+                          Icon(
+                            Icons.check,
+                            size: AppSizes.miniIconSize,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                        ],
+                        Text(
+                          cond.shortLabel,
+                          style: AppTextStyles.caption.copyWith(
+                            color: selected.contains(cond)
+                                ? Colors.white
+                                : c.textPrimary,
+                            fontWeight: selected.contains(cond)
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: c.warning, width: 1),
-        ),
-        errorMaxLines: 2,
-      ),
-    ),
-  );
-
-  Widget _buildDropdown(
-    String label,
-    String value,
-    List<String> items,
-    void Function(String?) onChanged,
-    C0Colors c,
-  ) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: DropdownButtonFormField<String>(
-      initialValue: value,
-      dropdownColor: c.card,
-      style: TextStyle(color: c.textPrimary, fontSize: 15),
-      icon: Icon(Icons.keyboard_arrow_down, color: c.primary),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: c.textSecondary),
-        filled: true,
-        fillColor: c.card,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: c.textSecondary.withOpacity(0.3),
-            width: 1,
+        if (selected.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xFF22c55e).withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.check_circle,
+                  color: Color(0xFF22c55e),
+                  size: 15,
+                ),
+                const SizedBox(width: AppSpacing.xs + 2),
+                Expanded(
+                  child: Text(
+                    '${selected.length} condition${selected.length > 1 ? 's' : ''} active — warnings enabled.',
+                    style: AppTextStyles.caption.copyWith(
+                      color: const Color(0xFF22c55e),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: c.primary, width: 1.5),
-        ),
-      ),
-      items: items
-          .map((i) => DropdownMenuItem(value: i, child: Text(i)))
-          .toList(),
-      onChanged: onChanged,
-    ),
-  );
+        ],
+        const SizedBox(height: AppSpacing.lg),
+      ],
+    );
+  }
 }

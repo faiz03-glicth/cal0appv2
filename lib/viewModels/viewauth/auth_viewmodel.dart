@@ -5,6 +5,10 @@ import '../../repositories/auth_repository.dart';
 class AuthViewModel extends ChangeNotifier {
   final AuthRepository _authRepo;
 
+  // Optional callbacks invoked on sign-out to let other VMs clear themselves.
+  // Registered from main.dart after all providers are ready.
+  final List<VoidCallback> _signOutCallbacks = [];
+
   AuthViewModel({AuthRepository? authRepository})
     : _authRepo = authRepository ?? AuthRepository();
 
@@ -16,11 +20,13 @@ class AuthViewModel extends ChangeNotifier {
   bool get isSignedIn => _authRepo.isSignedIn;
   Stream<User?> get authStateChanges => _authRepo.authStateChanges;
 
+  /// Register a callback to run on sign-out (e.g. vm.clearForLogout).
+  void addSignOutCallback(VoidCallback cb) => _signOutCallbacks.add(cb);
+
   Future<bool> signIn(String email, String password) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
-
     try {
       final uid = await _authRepo.signIn(email, password);
       isLoading = false;
@@ -31,7 +37,7 @@ class AuthViewModel extends ChangeNotifier {
       isLoading = false;
       notifyListeners();
       return false;
-    } catch (e) {
+    } catch (_) {
       errorMessage = 'Sign in failed. Please try again.';
       isLoading = false;
       notifyListeners();
@@ -40,6 +46,10 @@ class AuthViewModel extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    // Clear all dependent VMs before signing out
+    for (final cb in _signOutCallbacks) {
+      cb();
+    }
     await _authRepo.signOut();
     notifyListeners();
   }

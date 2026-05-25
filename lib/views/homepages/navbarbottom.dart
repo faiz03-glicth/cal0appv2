@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '/../views/users/userprofile_view.dart';
 import '/../views/homepages/tabs/scan_tabs.dart';
 import '/../views/homepages/tabs/home_tabs.dart';
-import '/../views/homepages/widgets/food_sheet.dart';
+import '../widgets/food_sheet.dart';
 import '/../views/homepages/tabs/dashboard_view.dart';
 
 class Homepage extends StatefulWidget {

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
-import 'package:cal0appv2/viewModels/theme/theme_viewmodel.dart';
 
 class C0AppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -21,8 +19,6 @@ class C0AppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
-    final themeVm = Provider.of<ThemeViewModel>(context);
-
     return AppBar(
       backgroundColor: c.header,
       foregroundColor: c.headerText,
@@ -31,47 +27,30 @@ class C0AppBar extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: showBack,
       leading: showBack
           ? IconButton(
-              icon: const Icon(Icons.arrow_back_ios, size: 20),
+              icon: const Icon(
+                Icons.arrow_back_ios,
+                size: AppSizes.fieldIconSize,
+              ),
               color: Colors.white,
               onPressed: () => Navigator.pop(context),
             )
           : null,
       title: Row(
         children: [
-          // App logo dot
           Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(right: 8),
+            width: AppSpacing.sm,
+            height: AppSpacing.sm,
+            margin: const EdgeInsets.only(right: AppSpacing.sm),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.6),
               shape: BoxShape.circle,
             ),
           ),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(title, style: AppTextStyles.title.copyWith(color: Colors.white)),
         ],
       ),
-      actions: [
-        // Theme toggle — always visible
-        IconButton(
-          icon: Icon(
-            themeVm.isDark ? Icons.light_mode : Icons.dark_mode,
-            color: Colors.white,
-            size: 20,
-          ),
-          onPressed: themeVm.toggleTheme,
-          tooltip: themeVm.isDark ? 'Light mode' : 'Dark mode',
-        ),
-        // Extra actions passed in
-        if (actions != null) ...actions!,
-      ],
+      // No dark mode toggle here — it's in UserProfileView > App Settings
+      actions: actions,
     );
   }
 }

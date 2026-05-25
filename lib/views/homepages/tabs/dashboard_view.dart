@@ -2,14 +2,15 @@ import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
-import '/../views/homepages/widgets/macro_row.dart';
-import '/../views/homepages/widgets/food_diary.dart';
-import '/../views/homepages/widgets/date_strip.dart';
-import '/../views/homepages/widgets/c0_app_bar.dart';
-import '/../views/homepages/widgets/calorie_ring.dart';
+import 'package:cal0appv2/models/nutrient_totals.dart';
+import '/../views/widgets/macro_row.dart';
+import '/../views/widgets/food_diary.dart';
+import '/../views/widgets/date_strip.dart';
+import '/../views/widgets/c0_app_bar.dart';
+import '/../views/widgets/calorie_ring.dart';
 import '/../viewModels/foodlog/foodlog_viewmodel.dart';
 import '/../viewModels/dashboard/dashboard_viewmodel.dart';
-import '/../views/homepages/widgets/nutrient_section.dart';
+import '/../views/widgets/nutrient_section.dart';
 import '/../viewModels/viewauth/auth_viewmodel.dart';
 
 class DashboardTab extends StatefulWidget {
@@ -27,6 +28,7 @@ class _DashboardTabState extends State<DashboardTab> {
       if (!mounted) return;
       final uid = context.read<AuthViewModel>().currentUid ?? '';
       if (uid.isEmpty) return;
+      // loadDashboard is a no-op if user is already cached
       context.read<DashboardViewModel>().loadDashboard(uid);
       context.read<FoodLogViewModel>().loadFoodLogs(uid: uid);
     });
@@ -44,20 +46,15 @@ class _DashboardTabState extends State<DashboardTab> {
   Future<void> _onDateSelected(BuildContext context, DateTime date) async {
     final uid = context.read<AuthViewModel>().currentUid ?? '';
     if (uid.isEmpty) return;
-
+    // Only reload food logs — user profile doesn't change per date
     await context.read<FoodLogViewModel>().changeSelectedDate(date, uid: uid);
-
-    if (!context.mounted) return;
-    context.read<DashboardViewModel>().loadDashboard(uid, date: date);
   }
 
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
     final uid = context.read<AuthViewModel>().currentUid ?? '';
-    final foodVm = Provider.of<FoodLogViewModel>(context);
-    final dashVm = Provider.of<DashboardViewModel>(context);
-    final selectedDate = foodVm.selectedDate;
+    final dashVm = context.watch<DashboardViewModel>();
 
     return Scaffold(
       backgroundColor: c.background,
@@ -67,46 +64,73 @@ class _DashboardTabState extends State<DashboardTab> {
           : RefreshIndicator(
               color: c.primary,
               onRefresh: () async {
-                await dashVm.loadDashboard(uid);
-                await foodVm.loadFoodLogs(uid: uid);
+                await dashVm.refreshDashboard(uid);
+                await context.read<FoodLogViewModel>().loadFoodLogs(uid: uid);
               },
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DateStrip(
-                      selectedDate: selectedDate,
-                      onDateSelected: (date) => _onDateSelected(context, date),
+                    // ── Date strip ──────────────────────────────────────
+                    Selector<FoodLogViewModel, DateTime>(
+                      selector: (_, vm) => vm.selectedDate,
+                      builder: (ctx, selectedDate, _) => DateStrip(
+                        selectedDate: selectedDate,
+                        onDateSelected: (d) => _onDateSelected(ctx, d),
+                      ),
                     ),
-                    //New Feature for adding Today /Yesterday
-                    //yes surr
-                    // Small "Today / Yesterday / Mon, 14 Apr" label.
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                      child: Text(
-                        _dateLabel(selectedDate),
-                        style: TextStyle(
-                          color: c.textSecondary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0.3,
+
+                    // ── Date label ──────────────────────────────────────
+                    Selector<FoodLogViewModel, DateTime>(
+                      selector: (_, vm) => vm.selectedDate,
+                      builder: (ctx, selectedDate, _) => Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.xl,
+                          AppSpacing.sm,
+                          AppSpacing.xl,
+                          0,
+                        ),
+                        child: Text(
+                          _dateLabel(selectedDate),
+                          style: AppTextStyles.caption.copyWith(
+                            color: c.textSecondary,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.3,
+                          ),
                         ),
                       ),
                     ),
-                    CalorieRing(
-                      totalCalories: foodVm.totalCalories,
-                      target: dashVm.calorieTarget,
+
+                    // ── Calorie ring ────────────────────────────────────
+                    // Selector: rebuilds ONLY when calories or target change
+                    Selector<FoodLogViewModel, int>(
+                      selector: (_, vm) => vm.totalCalories,
+                      builder: (_, cal, __) => CalorieRing(
+                        totalCalories: cal,
+                        target: dashVm.calorieTarget,
+                      ),
                     ),
-                    //Macross bros
-                    MacroRow(
-                      totalProtein: foodVm.totalProtein,
-                      totalCarbs: foodVm.totalCarbs,
-                      totalFat: foodVm.totalFat,
-                      targets: dashVm.macroTargets,
+
+                    // ── Macro row ───────────────────────────────────────
+                    // Selector: rebuilds only when NutrientTotals changes
+                    Selector<FoodLogViewModel, NutrientTotals>(
+                      selector: (_, vm) => vm.totals,
+                      builder: (_, totals, __) => MacroRow(
+                        totalProtein: totals.protein,
+                        totalCarbs: totals.carbs,
+                        totalFat: totals.fat,
+                        targets: dashVm.macroTargets,
+                      ),
                     ),
+
+                    // ── Nutrient section (sugar, sodium, etc.) ──────────
+                    // NutrientSection uses its own Selector internally
                     const NutrientSection(),
+
+                    // ── Food diary ──────────────────────────────────────
                     const FoodDiary(),
+
                     const SizedBox(height: 80),
                   ],
                 ),

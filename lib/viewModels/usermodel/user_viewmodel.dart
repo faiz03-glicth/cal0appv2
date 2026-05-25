@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '/models/user_model.dart';
+import 'package:cal0appv2/models/health/health_condition.dart';
 import 'package:cal0appv2/repositories/auth_repository.dart';
 import 'package:cal0appv2/repositories/user_repository.dart';
 
@@ -29,12 +30,12 @@ class UserViewModel extends ChangeNotifier {
   DateTime? get birthday => _user?.birthday;
   double? get weight => _user?.weight;
   double? get height => _user?.height;
+  List<HealthCondition> get healthConditions => _user?.healthConditions ?? [];
 
   Future<void> loadUser(String userId) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
-
     try {
       _user = await _userRepo.getUser(userId);
     } catch (e) {
@@ -54,6 +55,7 @@ class UserViewModel extends ChangeNotifier {
     required DateTime birthday,
     required double weight,
     required double height,
+    List<HealthCondition>? healthConditions,
   }) async {
     isLoading = true;
     errorMessage = null;
@@ -84,6 +86,11 @@ class UserViewModel extends ChangeNotifier {
         ..weight = weight
         ..height = height;
 
+      // Update health conditions if provided
+      if (healthConditions != null) {
+        _user!.healthConditions = healthConditions;
+      }
+
       await _userRepo.updateUser(_user!);
       successMessage = 'Profile updated successfully';
     } catch (e) {
@@ -98,7 +105,6 @@ class UserViewModel extends ChangeNotifier {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
-
     try {
       if (!_isValidPassword(newPassword)) {
         errorMessage = 'Password must be at least 6 characters';
@@ -111,14 +117,12 @@ class UserViewModel extends ChangeNotifier {
     } catch (e) {
       errorMessage = 'Failed to update password: $e';
     }
-
     isLoading = false;
     notifyListeners();
   }
 
   bool _isValidEmail(String email) =>
       RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
-
   bool _isValidPassword(String password) => password.length >= 6;
 
   void clearMessages() {

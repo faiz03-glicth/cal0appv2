@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
-import 'package:cal0appv2/views/homepages/widgets/c0_app_bar.dart';
-import 'package:cal0appv2/views/homepages/widgets/scan_confirm_sheet.dart';
+import 'package:cal0appv2/views/widgets/c0_app_bar.dart';
+import 'package:cal0appv2/views/widgets/scan_confirm_sheet.dart';
 import 'package:cal0appv2/viewModels/scan/scan_viewmodel.dart';
 
 class ScanTab extends StatelessWidget {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/widgets/app_card.dart';
 
 class CalorieRing extends StatelessWidget {
   final int totalCalories;
@@ -10,8 +11,8 @@ class CalorieRing extends StatelessWidget {
   const CalorieRing({
     super.key,
     required this.totalCalories,
-    this.target = 2000, // swap with vm.calorieTarget later
-    this.burned = 350, // swap with vm.caloriesBurned later
+    this.target = 2000,
+    this.burned = 350,
   });
 
   @override
@@ -21,31 +22,20 @@ class CalorieRing extends StatelessWidget {
     final remaining = (target - consumed + burned).clamp(0, target);
     final progress = (consumed / target).clamp(0.0, 1.0);
 
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: c.card,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return AppCard(
+      margin: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      radius: AppRadius.xxl,
       child: Column(
         children: [
           Text(
             'Calories',
-            style: TextStyle(
+            style: AppTextStyles.body.copyWith(
               fontWeight: FontWeight.bold,
-              fontSize: 16,
               color: c.primary,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           SizedBox(
             height: 180,
             child: Stack(
@@ -58,13 +48,13 @@ class CalorieRing extends StatelessWidget {
                     centerSpaceRadius: 65,
                     sections: [
                       PieChartSectionData(
-                        value: progress,
-                        color: c.primary,
+                        value: progress > 0 ? progress : 0.001,
+                        color: progress > 0 ? c.primary : c.track,
                         radius: 18,
                         showTitle: false,
                       ),
                       PieChartSectionData(
-                        value: 1 - progress,
+                        value: 1 - (progress > 0 ? progress : 0.001),
                         color: c.track,
                         radius: 18,
                         showTitle: false,
@@ -77,49 +67,50 @@ class CalorieRing extends StatelessWidget {
                   children: [
                     Text(
                       '${remaining.toInt()}',
-                      style: TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
+                      style: AppTextStyles.ringValue.copyWith(
                         color: c.textPrimary,
                       ),
                     ),
                     Text(
-                      'kcal left',
-                      style: TextStyle(fontSize: 13, color: c.textSecondary),
+                      consumed > 0 ? 'kcal left' : 'kcal goal',
+                      style: AppTextStyles.caption.copyWith(
+                        color: c.textSecondary,
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStat('Eaten', '${consumed.toInt()}', c.primary),
-              _buildStat('Burned', '${burned.toInt()}', c.warning),
-              _buildStat('Goal', '${target.toInt()}', c.slate),
+              _Stat('Eaten', '${consumed.toInt()}', c.primary),
+              _Stat('Burned', '${burned.toInt()}', c.warning),
+              _Stat('Goal', '${target.toInt()}', c.slate),
             ],
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildStat(String label, String value, Color color) {
+class _Stat extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  const _Stat(this.label, this.value, this.color);
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-            color: color,
-          ),
-        ),
+        Text(value, style: AppTextStyles.statValue.copyWith(color: color)),
         Text(
           label,
-          style: const TextStyle(fontSize: 12, color: C0Theme.slateGrey),
+          style: AppTextStyles.statLabel.copyWith(color: C0Theme.slateGrey),
         ),
       ],
     );

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cal0appv2/models/foodlog_model.dart';
+import 'package:cal0appv2/models/nutrient_totals.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
 import 'package:cal0appv2/repositories/nutrition_repository.dart';
+import 'package:cal0appv2/services/cache/recent_food_cache.dart';
 
 enum HistoryFilter { all, manual, scanned }
 
@@ -15,13 +17,13 @@ class FoodLogViewModel extends ChangeNotifier {
   }) : _foodLogRepo = foodLogRepository ?? FoodLogRepository(),
        _nutritionRepo = nutritionRepository ?? NutritionRepository();
 
-  // ── Internal helpers ──────────────────────────────────────────────────────
-  /// Strips time component — all date comparisons and storage use this.
-  static DateTime _midnight(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
-
-  // ── State ─────────────────────────────────────────────────────────────────
+  // ── Internal state ─────────────────────────────────────────────────────
   List<FoodLogModel> _foodLogs = [];
+  NutrientTotals _totals = NutrientTotals.empty; // ← single cached computation
   List<Map<String, dynamic>> _searchResults = [];
+  List<RecentFoodEntry> _recentFoods = [];
+  bool _recentFoodsLoaded = false;
+
   bool isLoading = false;
   bool isSaving = false;
   bool isSearching = false;
@@ -30,42 +32,42 @@ class FoodLogViewModel extends ChangeNotifier {
   String? successMessage;
 
   DateTime _selectedDate = _midnight(DateTime.now());
-  // static DateTime _midnight(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 
-  // ── Form fields ───────────────────────────────────────────────────────────
+  // Form fields
   String foodName = '';
   String calories = '';
   double protein = 0;
   double carbs = 0;
   double fat = 0;
 
-  // ── Getters ───────────────────────────────────────────────────────────────
+  static DateTime _midnight(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
+
+  // ── Recompute totals after any list mutation ───────────────────────────
+  void _recomputeTotals() {
+    _totals = NutrientTotals.fromLogs(_foodLogs);
+  }
+
+  // ── Public getters ─────────────────────────────────────────────────────
   DateTime get selectedDate => _selectedDate;
   List<FoodLogModel> get foodLogs => _foodLogs;
   List<Map<String, dynamic>> get searchResults => _searchResults;
+  List<RecentFoodEntry> get recentFoods => _recentFoods;
   bool get isToday => _selectedDate == _midnight(DateTime.now());
   bool get isFormValid =>
       foodName.trim().isNotEmpty && calories.trim().isNotEmpty;
 
-  // Totals — computed from in-memory list via repository helper (no Firestore)
-  int get totalCalories => _foodLogRepo.totalCalories(_foodLogs);
-  double get totalProtein => _foodLogRepo.totalProtein(_foodLogs);
-  double get totalCarbs => _foodLogRepo.totalCarbs(_foodLogs);
-  double get totalFat => _foodLogRepo.totalFat(_foodLogs);
+  // Totals — all read from _totals (single O(n) pass already done)
+  NutrientTotals get totals => _totals;
+  int get totalCalories => _totals.calories;
+  double get totalProtein => _totals.protein;
+  double get totalCarbs => _totals.carbs;
+  double get totalFat => _totals.fat;
+  double get totalSugar => _totals.sugar;
+  double get totalSodium => _totals.sodium;
+  bool get hasLogs => !_totals.isEmpty;
 
-  // ── Date selection ────────────────────────────────────────────────────────
-  Future<void> changeSelectedDate(DateTime date, {required String uid}) async {
-    final newDate = _midnight(date);
-    if (newDate == _selectedDate) return;
+  // ── Load ───────────────────────────────────────────────────────────────
 
-    _selectedDate = newDate;
-    notifyListeners();
-
-    // Reload logs for the newly selected day.
-    await loadFoodLogs(uid: uid);
-  }
-
-  // ── Load ──────────────────────────────────────────────────────────────────
   Future<void> loadFoodLogs({required String uid}) async {
     isLoading = true;
     errorMessage = null;
@@ -73,38 +75,69 @@ class FoodLogViewModel extends ChangeNotifier {
 
     try {
       _foodLogs = await _foodLogRepo.getFoodLogs(uid, _selectedDate);
+      _recomputeTotals(); // ← always recalculate from fresh data
     } catch (e) {
       errorMessage = 'Failed to load food logs: $e';
       _foodLogs = [];
+      _recomputeTotals();
     }
 
     isLoading = false;
     notifyListeners();
   }
 
-  // ── Search ────────────────────────────────────────────────────────────────
+  // ── Date navigation ────────────────────────────────────────────────────
+
+  Future<void> changeSelectedDate(DateTime date, {required String uid}) async {
+    final newDate = _midnight(date);
+    if (newDate == _selectedDate) return;
+    _selectedDate = newDate;
+    notifyListeners();
+    await loadFoodLogs(uid: uid);
+  }
+
+  // ── Recent foods ───────────────────────────────────────────────────────
+
+  /// Loaded lazily — only when the food sheet opens.
+  Future<void> loadRecentFoods() async {
+    if (_recentFoodsLoaded) return; // already loaded this session
+    _recentFoods = await RecentFoodCache.getAll();
+    _recentFoodsLoaded = true;
+    notifyListeners();
+  }
+
+  /// Force reload — called after a successful save to surface the new item.
+  Future<void> _refreshRecentFoods() async {
+    _recentFoods = await RecentFoodCache.getAll();
+    _recentFoodsLoaded = true;
+    // Don't notifyListeners here — caller will do it
+  }
+
+  List<RecentFoodEntry> filteredRecent(String query) =>
+      RecentFoodCache.filter(_recentFoods, query);
+
+  // ── Search ─────────────────────────────────────────────────────────────
+
   Future<void> searchFood(String query) async {
     if (query.trim().isEmpty) {
       _searchResults = [];
       notifyListeners();
       return;
     }
-
     isSearching = true;
     notifyListeners();
-
     try {
       _searchResults = await _nutritionRepo.searchFood(query.trim());
     } catch (e) {
       _searchResults = [];
       errorMessage = 'Search failed: $e';
     }
-
     isSearching = false;
     notifyListeners();
   }
 
-  // ── Select from search results ────────────────────────────────────────────
+  // ── Form fill helpers ──────────────────────────────────────────────────
+
   void selectFood(Map<String, dynamic> food) {
     foodName = food['name'] ?? food['food_name'] ?? food['naman'] ?? '';
     calories = (food['calories'] ?? food['energy'] ?? food['kalori'] ?? 0)
@@ -118,13 +151,24 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Fill form from a RecentFoodEntry (one-tap reuse).
+  void selectRecent(RecentFoodEntry entry) {
+    foodName = entry.name;
+    calories = entry.calories.toString();
+    protein = entry.protein;
+    carbs = entry.carbs;
+    fat = entry.fat;
+    manualMode = true;
+    _searchResults = [];
+    notifyListeners();
+  }
+
   void setManualMode(bool value) {
     manualMode = value;
     if (!value) _searchResults = [];
     notifyListeners();
   }
 
-  // ── Form field updaters ───────────────────────────────────────────────────
   void updateFoodName(String v) {
     foodName = v;
     notifyListeners();
@@ -173,7 +217,8 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── CREATE ────────────────────────────────────────────────────────────────
+  // ── CREATE ─────────────────────────────────────────────────────────────
+
   Future<bool> addFoodLog({required String uid}) async {
     if (!isFormValid) {
       errorMessage = 'Food name and calories are required';
@@ -186,14 +231,13 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final foodLogDate = _selectedDate;
       final log = FoodLogModel(
         foodLogID: '',
         foodLogName: foodName.trim(),
         calorieIntake: int.tryParse(calories.trim()) ?? 0,
         userId: uid,
-        foodLogDate: foodLogDate,
-        loggedAt: DateTime.now(), // wall-clock time of the actual log action
+        foodLogDate: _selectedDate,
+        loggedAt: DateTime.now(),
         protein: protein,
         carbs: carbs,
         fats: fat,
@@ -201,9 +245,25 @@ class FoodLogViewModel extends ChangeNotifier {
 
       await _foodLogRepo.addFoodLog(uid, log);
 
+      // Optimistic update — no re-fetch needed
       _foodLogs.add(log);
+      _recomputeTotals();
+
+      // Cache this food for quick reuse
+      await RecentFoodCache.add(
+        RecentFoodEntry(
+          name: log.foodLogName,
+          calories: log.calorieIntake,
+          protein: log.protein,
+          carbs: log.carbs,
+          fat: log.fats,
+          lastUsedMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      await _refreshRecentFoods();
+
       successMessage = '${foodName.trim()} added to diary';
-      clearForm();
+      clearForm(); // calls notifyListeners
     } catch (e) {
       errorMessage = 'Failed to add food: $e';
       isSaving = false;
@@ -216,7 +276,8 @@ class FoodLogViewModel extends ChangeNotifier {
     return true;
   }
 
-  // ── UPDATE ────────────────────────────────────────────────────────────────
+  // ── UPDATE ─────────────────────────────────────────────────────────────
+
   Future<bool> updateFoodLog({
     required String uid,
     required FoodLogModel existing,
@@ -244,6 +305,21 @@ class FoodLogViewModel extends ChangeNotifier {
         (l) => l.foodLogID == existing.foodLogID,
       );
       if (idx != -1) _foodLogs[idx] = existing;
+      _recomputeTotals();
+
+      // Update cache entry with new values
+      await RecentFoodCache.add(
+        RecentFoodEntry(
+          name: existing.foodLogName,
+          calories: existing.calorieIntake,
+          protein: existing.protein,
+          carbs: existing.carbs,
+          fat: existing.fats,
+          lastUsedMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      await _refreshRecentFoods();
+
       successMessage = 'Updated successfully';
       clearForm();
     } catch (e) {
@@ -258,7 +334,8 @@ class FoodLogViewModel extends ChangeNotifier {
     return true;
   }
 
-  // ── DELETE ────────────────────────────────────────────────────────────────
+  // ── DELETE ─────────────────────────────────────────────────────────────
+
   Future<bool> deleteFoodLog({
     required String uid,
     required String foodLogID,
@@ -269,9 +346,8 @@ class FoodLogViewModel extends ChangeNotifier {
 
     try {
       await _foodLogRepo.deleteFoodLog(uid, foodLogID);
-
-      // Remove in memory — no Firestore re-fetch (Bug #18 fix)
       _foodLogs.removeWhere((l) => l.foodLogID == foodLogID);
+      _recomputeTotals(); // recalculate after removal
       successMessage = 'Food removed from diary';
     } catch (e) {
       errorMessage = 'Failed to delete food: $e';
@@ -283,5 +359,22 @@ class FoodLogViewModel extends ChangeNotifier {
     isLoading = false;
     notifyListeners();
     return true;
+  }
+
+  // ── Logout / reset ─────────────────────────────────────────────────────
+
+  /// Called from auth sign-out to wipe all in-memory state.
+  /// Does NOT clear the cache — cache is per-device and survives logout
+  /// intentionally (same physical user different account is edge case).
+  void clearForLogout() {
+    _foodLogs = [];
+    _totals = NutrientTotals.empty;
+    _searchResults = [];
+    _recentFoods = [];
+    _recentFoodsLoaded = false;
+    _selectedDate = _midnight(DateTime.now());
+    errorMessage = null;
+    successMessage = null;
+    notifyListeners();
   }
 }

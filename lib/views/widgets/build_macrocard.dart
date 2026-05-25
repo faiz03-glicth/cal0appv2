@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/widgets/app_card.dart';
 
+/// Macro summary card used in the dashboard MacroRow.
+/// Displays label, current value, a progress bar, and the target.
 class BuildMacroCard extends StatelessWidget {
   final C0Colors c;
   final String label;
@@ -21,53 +24,37 @@ class BuildMacroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final pct = (current / target).clamp(0.0, 1.0);
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: c.card,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label,
-              style: TextStyle(
-                fontSize: 11,
+              style: AppTextStyles.tiny.copyWith(
                 color: c.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: AppSpacing.xs + 2),
             Text(
               '${current.toStringAsFixed(1)}g',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
+              style: AppTextStyles.statValue.copyWith(color: color),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: AppSpacing.xs + 2),
             ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(AppSpacing.xs),
               child: LinearProgressIndicator(
                 value: pct,
                 minHeight: 6,
-                backgroundColor: color.withOpacity(0.15),
+                backgroundColor: color.withValues(alpha: 0.15),
                 color: color,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               '/ ${target.toStringAsFixed(0)}g',
-              style: TextStyle(fontSize: 10, color: c.textSecondary),
+              style: AppTextStyles.micro.copyWith(color: c.textSecondary),
             ),
           ],
         ),

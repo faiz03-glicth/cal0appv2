@@ -7,6 +7,8 @@ import 'package:cal0appv2/repositories/scan_repository.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
 import 'package:cal0appv2/services/scan/ai_service.dart';
 import 'package:cal0appv2/services/scan/nutrition_extractor_service.dart';
+import 'package:cal0appv2/services/logging/activity_logger.dart';
+import 'package:cal0appv2/models/logging/activity_log.dart';
 
 class ScanViewModel extends ChangeNotifier {
   final ScanRepository _scanRepo;
@@ -20,10 +22,18 @@ class ScanViewModel extends ChangeNotifier {
     FoodLogRepository? foodLogRepository,
   }) : _scanRepo = scanRepository ?? ScanRepository(),
        _foodLogRepo = foodLogRepository ?? FoodLogRepository() {
-    _aiService.initialize().then((_) => notifyListeners());
+    _aiService.initialize().then((_) {
+      if (!_aiService.isReady) {
+        ActivityLogger.instance.log(
+          ActivityEventType.aiModelLoadFailed,
+          errorMessage: 'TFLite DistilBERT model failed to initialise',
+        );
+      }
+      notifyListeners();
+    });
   }
 
-  // ── State ─────────────────────────────────────────────────────────────────
+  // ── State ────────────────────────────────────────────────────────────────
   bool isScanning = false;
   bool isAnalyzing = false;
   bool isSaving = false;
@@ -34,57 +44,113 @@ class ScanViewModel extends ChangeNotifier {
   String? successMessage;
   File? scannedImageFile;
 
-  // OCR extraction result
   ScanResultModel? extractedResult;
-
-  // AI verdict
   bool hasSuspiciousIngredients = false;
   double aiConfidence = 0.0;
 
+  /// True when OCR quality score < 0.40. AI inference is skipped.
+  bool lowOcrQuality = false;
+
+  /// True when AI confidence < 0.50. User is warned before saving.
+  bool lowAiConfidence = false;
+
   String get verdictLabel {
     if (extractedResult == null) return '';
-    final pct = (aiConfidence * 100).toStringAsFixed(0);
+    final pct = '${(aiConfidence * 100).toStringAsFixed(0)}%';
+    if (lowOcrQuality)
+      return 'Scan quality too low — results may be inaccurate';
+    if (lowAiConfidence)
+      return 'AI confidence low ($pct) — please verify manually';
     return hasSuspiciousIngredients
-        ? 'Potential amino spiking detected ($pct% confidence)'
-        : 'No suspicious ingredients found ($pct% confidence)';
+        ? 'Potential amino spiking detected ($pct confidence)'
+        : 'No suspicious ingredients found ($pct confidence)';
   }
 
-  // ── Scan ──────────────────────────────────────────────────────────────────
+  // ── Scan pipeline ────────────────────────────────────────────────────────
 
   Future<void> scanImage(File imageFile) async {
-    isScanning = true;
-    errorMessage = null;
-    successMessage = null;
-    scannedText = null;
-    scannedLines = [];
-    extractedResult = null;
-    hasSuspiciousIngredients = false;
-    aiConfidence = 0.0;
-    scannedImageFile = imageFile;
-    notifyListeners();
+    _reset(imageFile);
+    final timer = Stopwatch()..start();
+    ActivityLogger.instance.log(ActivityEventType.scanInitiated);
 
     try {
-      // Step 1 — OCR
+      // Stage 1: OCR
       scannedLines = await _scanRepo.scanLabelLines(imageFile);
       scannedText = scannedLines.join('\n');
+      final ocrMs = timer.elapsedMilliseconds;
 
-      // Step 2 — Smart nutrition extraction
+      // Stage 2: quality gate
+      final ocrQuality = _assessOcrQuality(scannedLines);
+      lowOcrQuality = ocrQuality < 0.40;
+
+      ActivityLogger.instance.log(
+        ActivityEventType.scanOcrCompleted,
+        ocrExtractedText: scannedText,
+        durationMs: ocrMs,
+        scanImagePath: imageFile.path,
+        errorMessage: lowOcrQuality
+            ? 'OCR quality ${ocrQuality.toStringAsFixed(2)} < threshold 0.40'
+            : null,
+      );
+
+      // Stage 3: nutrition extraction
       extractedResult = _extractor.extract(scannedLines);
 
       isScanning = false;
       isAnalyzing = true;
       notifyListeners();
 
-      // Step 3 — BERT amino spiking analysis
-      if (_aiService.isReady && extractedResult!.ingredientText.isNotEmpty) {
+      // Stage 4: AI inference (skipped if OCR quality too low)
+      if (_aiService.isReady &&
+          extractedResult!.ingredientText.isNotEmpty &&
+          !lowOcrQuality) {
+        final aiTimer = Stopwatch()..start();
         final result = await _aiService.analyzeIngredients(
           extractedResult!.ingredientText,
         );
+        final aiMs = aiTimer.elapsedMilliseconds;
+
         hasSuspiciousIngredients = result['isSpiked'] as bool;
         aiConfidence = result['confidence'] as double;
+        lowAiConfidence = aiConfidence < 0.50;
+
+        ActivityLogger.instance.logScan(
+          ocrText: scannedText!,
+          label: hasSuspiciousIngredients ? 'SPIKED' : 'CLEAN',
+          confidence: aiConfidence,
+          imagePath: imageFile.path,
+          flagged: (result['flagged'] as List?)?.cast<String>() ?? [],
+          ms: aiMs,
+        );
+      } else if (lowOcrQuality) {
+        // Fallback: rule-based only
+        hasSuspiciousIngredients = false;
+        aiConfidence = 0.0;
+        ActivityLogger.instance.log(
+          ActivityEventType.aiPredictionLowConfidence,
+          ocrExtractedText: scannedText,
+          errorMessage: 'Skipped AI: OCR quality gate failed',
+          scanImagePath: imageFile.path,
+        );
       }
-    } catch (e) {
+
+      // Stage 5: slow pipeline alert (> 5s)
+      final totalMs = timer.elapsedMilliseconds;
+      if (totalMs > 5000) {
+        ActivityLogger.instance.log(
+          ActivityEventType.slowOperation,
+          durationMs: totalMs,
+          errorMessage: 'Scan pipeline exceeded 5000ms',
+        );
+      }
+    } catch (e, st) {
       errorMessage = 'Scan failed. Please try again with better lighting.';
+      ActivityLogger.instance.log(
+        ActivityEventType.scanFailed,
+        errorCode: 'SCAN_PIPELINE_ERROR',
+        errorMessage: e.toString(),
+        stackTrace: st,
+      );
     }
 
     isScanning = false;
@@ -92,11 +158,11 @@ class ScanViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Save to scan history + optionally food log ────────────────────────────
+  // ── Save ─────────────────────────────────────────────────────────────────
+
   Future<bool> saveScanResult({
     required String uid,
     required ScanResultModel confirmed,
-    required bool addToFoodLog, // kept for API compat, always true now
   }) async {
     isSaving = true;
     errorMessage = null;
@@ -129,9 +195,20 @@ class ScanViewModel extends ChangeNotifier {
       );
 
       await _foodLogRepo.addFoodLog(uid, log);
+
+      ActivityLogger.instance.log(
+        ActivityEventType.scanResultSaved,
+        foodName: log.foodLogName,
+        calories: log.calorieIntake,
+        foodSource: 'scanned',
+        aiPredictionLabel: log.scanAnalysisResult,
+        aiConfidence: aiConfidence,
+      );
+
       successMessage = 'Saved to food log!';
-    } catch (e) {
+    } catch (e, st) {
       errorMessage = 'Failed to save: $e';
+      ActivityLogger.instance.logError('SCAN_SAVE_ERROR', e, st);
       isSaving = false;
       notifyListeners();
       return false;
@@ -142,6 +219,48 @@ class ScanViewModel extends ChangeNotifier {
     return true;
   }
 
+  // ── OCR quality assessment ────────────────────────────────────────────────
+  // Scores 0.0 (garbage) to 1.0 (clean label scan).
+  // A "good" line is ≥ 60% ASCII alphanumerics.
+
+  double _assessOcrQuality(List<String> lines) {
+    if (lines.isEmpty) return 0.0;
+    int good = 0;
+    for (final line in lines) {
+      final t = line.trim();
+      if (t.isEmpty) continue;
+      final ascii = t.runes
+          .where(
+            (c) =>
+                (c >= 65 && c <= 90) ||
+                (c >= 97 && c <= 122) ||
+                (c >= 48 && c <= 57),
+          )
+          .length;
+      if (t.isNotEmpty && ascii / t.length >= 0.60) good++;
+    }
+    return good / lines.length;
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  void _reset(File imageFile) {
+    isScanning = true;
+    isAnalyzing = false;
+    isSaving = false;
+    errorMessage = null;
+    successMessage = null;
+    scannedText = null;
+    scannedLines = [];
+    extractedResult = null;
+    hasSuspiciousIngredients = false;
+    aiConfidence = 0.0;
+    lowOcrQuality = false;
+    lowAiConfidence = false;
+    scannedImageFile = imageFile;
+    notifyListeners();
+  }
+
   void clearScan() {
     scannedText = null;
     scannedLines = [];
@@ -150,6 +269,8 @@ class ScanViewModel extends ChangeNotifier {
     extractedResult = null;
     hasSuspiciousIngredients = false;
     aiConfidence = 0.0;
+    lowOcrQuality = false;
+    lowAiConfidence = false;
     scannedImageFile = null;
     notifyListeners();
   }

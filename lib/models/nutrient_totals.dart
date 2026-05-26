@@ -1,4 +1,4 @@
-import 'package:cal0appv2/models/logging/foodlog_model.dart';
+import 'package:cal0appv2/models/foodlog_model.dart';
 
 class NutrientTotals {
   final int calories;

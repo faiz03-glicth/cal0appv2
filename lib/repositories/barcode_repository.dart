@@ -44,7 +44,7 @@ class BarcodeRepository {
       case BarcodeLookupNotFound(:final barcode):
         await BarcodeCacheService.saveNotFound(barcode);
       case BarcodeLookupError():
-        break; // Don't cache errors (might be transient)
+        break;
     }
 
     return result;

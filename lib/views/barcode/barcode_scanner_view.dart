@@ -17,6 +17,7 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
     with WidgetsBindingObserver {
   late final MobileScannerController _controller;
   bool _torchOn = false;
+  // Guards against opening the sheet multiple times concurrently.
   bool _sheetOpen = false;
 
   @override
@@ -61,25 +62,40 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
   Future<void> _onDetect(BarcodeCapture capture) async {
     final barcode = capture.barcodes.firstOrNull?.rawValue;
 
-    debugPrint('📸 Capture received, barcodes: ${capture.barcodes.length}');
-    if (barcode != null) debugPrint('📸 Raw value: $barcode');
+    debugPrint(
+      '📸 Capture received — barcodes: ${capture.barcodes.length}'
+      '${barcode != null ? ", value: $barcode" : ""}',
+    );
 
+    // No readable barcode in this frame, or sheet already open
     if (barcode == null || _sheetOpen) return;
 
     final vm = context.read<BarcodeViewModel>();
-    if (!vm.canScan) return;
 
+    // ViewModel isn't ready to accept a new scan
+    if (!vm.canScan) {
+      debugPrint('⏭ VM not ready — state: ${vm.state}');
+      return;
+    }
+
+    // Kick off the lookup — this changes vm.state to `scanning`
     await vm.onBarcodeDetected(barcode);
 
+    // Check mounted before doing anything UI-related post-await
     if (!mounted) return;
 
-    if (vm.state == BarcodeScanState.found ||
-        vm.state == BarcodeScanState.notFound ||
-        vm.state == BarcodeScanState.failed) {
+    final resultState = vm.state;
+    debugPrint('📦 Post-lookup state: $resultState');
+
+    if (resultState == BarcodeScanState.found ||
+        resultState == BarcodeScanState.notFound ||
+        resultState == BarcodeScanState.failed) {
+      // Stop scanning while sheet is open
       _controller.stop();
       _sheetOpen = true;
       await _showResultSheet();
     }
+    // If still scanning (shouldn't happen) or idle, do nothing extra
   }
 
   Future<void> _showResultSheet() async {
@@ -93,6 +109,8 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
         child: const BarcodeResultSheet(),
       ),
     );
+
+    // Sheet dismissed — reset VM and restart scanner
     _sheetOpen = false;
     if (mounted) {
       context.read<BarcodeViewModel>().reset();
@@ -129,7 +147,7 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
             bottom: 40,
             left: 0,
             right: 0,
-            child: _StatusBanner(state: vm.state),
+            child: _StatusBanner(state: vm.state, error: vm.errorMessage),
           ),
         ],
       ),
@@ -208,12 +226,34 @@ class _OverlayPainter extends CustomPainter {
   bool shouldRepaint(_) => false;
 }
 
+/// Shows scanning status + any error messages below the scan window.
 class _StatusBanner extends StatelessWidget {
   final BarcodeScanState state;
-  const _StatusBanner({required this.state});
+  final String? error;
+
+  const _StatusBanner({required this.state, this.error});
 
   @override
   Widget build(BuildContext context) {
+    // Show error even when state goes back to failed
+    if (state == BarcodeScanState.failed && error != null) {
+      return Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.red.shade900.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            error!,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
     if (state == BarcodeScanState.idle) return const SizedBox.shrink();
 
     final String label;

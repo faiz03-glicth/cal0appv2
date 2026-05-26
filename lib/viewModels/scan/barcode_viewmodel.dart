@@ -28,10 +28,12 @@ class BarcodeViewModel extends ChangeNotifier {
   String? _errorMessage;
   String? _successMessage;
 
-  // Debounce
+  // Debounce — tracks the barcode currently being processed
   String? _processingBarcode;
   DateTime? _lastScanTime;
-  static const _debounce = Duration(seconds: 2);
+  // Debounce window: long enough to avoid double-fires, short enough to not
+  // block legitimate re-scans after a reset.
+  static const _debounce = Duration(milliseconds: 1500);
 
   // ── Getters ───────────────────────────────────────────────────────────
 
@@ -44,25 +46,35 @@ class BarcodeViewModel extends ChangeNotifier {
   bool get isIdle => _state == BarcodeScanState.idle;
   bool get isLooking => _state == BarcodeScanState.scanning;
   bool get isSaving => _state == BarcodeScanState.saving;
+
+  // canScan: only block when we are actively looking up OR already have a result
+  // waiting for the user — NOT when we are idle.
   bool get canScan => _state == BarcodeScanState.idle;
 
   // ── Barcode detected ──────────────────────────────────────────────────
 
   Future<void> onBarcodeDetected(String rawBarcode) async {
-    // ADD THIS LINE
-    debugPrint('🔍 Barcode detected: $rawBarcode');
+    debugPrint(
+      '🔍 BarcodeViewModel.onBarcodeDetected: $rawBarcode  state=$_state',
+    );
+
+    // Guard 1: already showing a result or saving — ignore until reset
+    if (!canScan) {
+      debugPrint('⏭ Cannot scan — state is $_state');
+      return;
+    }
 
     final now = DateTime.now();
+
+    // Guard 2: debounce — same barcode within the window
     if (_processingBarcode == rawBarcode &&
         _lastScanTime != null &&
         now.difference(_lastScanTime!) < _debounce) {
-      debugPrint('⏭ Debounce skip: $rawBarcode');
+      debugPrint('⏭ Debounce skip for $rawBarcode');
       return;
     }
-    if (!canScan) {
-      debugPrint('⏭ Cannot scan, state: $_state');
-      return;
-    }
+
+    // Commit to processing this barcode
     _processingBarcode = rawBarcode;
     _lastScanTime = now;
     _lastBarcode = rawBarcode;
@@ -75,20 +87,27 @@ class BarcodeViewModel extends ChangeNotifier {
       errorMessage: 'barcode=$rawBarcode',
     );
 
-    final result = await _barcodeRepo.lookup(rawBarcode);
+    try {
+      final result = await _barcodeRepo.lookup(rawBarcode);
 
-    switch (result) {
-      case BarcodeLookupSuccess(:final food):
-        _foundFood = food;
-        _setState(BarcodeScanState.found);
+      switch (result) {
+        case BarcodeLookupSuccess(:final food):
+          _foundFood = food;
+          _setState(BarcodeScanState.found);
 
-      case BarcodeLookupNotFound():
-        _foundFood = null;
-        _setState(BarcodeScanState.notFound);
+        case BarcodeLookupNotFound():
+          _foundFood = null;
+          _setState(BarcodeScanState.notFound);
 
-      case BarcodeLookupError(:final message):
-        _errorMessage = message;
-        _setState(BarcodeScanState.failed);
+        case BarcodeLookupError(:final message):
+          _errorMessage = message;
+          debugPrint('❌ Barcode lookup error: $message');
+          _setState(BarcodeScanState.failed);
+      }
+    } catch (e) {
+      _errorMessage = 'Lookup failed: $e';
+      debugPrint('❌ Barcode lookup exception: $e');
+      _setState(BarcodeScanState.failed);
     }
   }
 
@@ -145,6 +164,7 @@ class BarcodeViewModel extends ChangeNotifier {
       return true;
     } catch (e) {
       _errorMessage = 'Failed to save: $e';
+      debugPrint('❌ Save error: $e');
       ActivityLogger.instance.logError('BARCODE_SAVE_ERROR', e);
       _setState(BarcodeScanState.failed);
       return false;
@@ -159,11 +179,13 @@ class BarcodeViewModel extends ChangeNotifier {
     _errorMessage = null;
     _successMessage = null;
     _processingBarcode = null;
+    _lastScanTime = null; // ← clear time so next scan isn't debounced
     _setState(BarcodeScanState.idle);
   }
 
   void _setState(BarcodeScanState state) {
     _state = state;
+    debugPrint('🔄 BarcodeViewModel state → $state');
     notifyListeners();
   }
 }

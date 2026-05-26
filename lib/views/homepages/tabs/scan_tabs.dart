@@ -74,6 +74,20 @@ class ScanTab extends StatelessWidget {
                         : () => _pickAndScan(context, ImageSource.gallery),
                   ),
                 ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: c.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.barcode_reader),
+                  label: const Text('Barcode'),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BarcodeScannerView(),
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 20),

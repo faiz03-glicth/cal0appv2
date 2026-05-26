@@ -5,7 +5,6 @@ import 'package:cal0appv2/models/scan_result_model.dart';
 import 'package:cal0appv2/viewModels/scan/scan_viewmodel.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 import 'package:cal0appv2/viewModels/health/health_warning_viewmodel.dart';
-import 'package:cal0appv2/models/health/health_condition.dart';
 import 'package:cal0appv2/views/widgets/app_text_field.dart';
 import 'package:cal0appv2/views/widgets/app_primary_button.dart';
 import 'package:cal0appv2/views/widgets/app_message_banner.dart';
@@ -62,13 +61,10 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
     return c.warning;
   }
 
-  // ── Save with health check ─────────────────────────────────────────────
-
   Future<void> _save(BuildContext context, ScanViewModel vm) async {
     final uid = context.read<AuthViewModel>().currentUid ?? '';
     if (uid.isEmpty) return;
 
-    // 1. Build the confirmed result from edited field values
     final confirmed = widget.initial.copyWith(
       productName: _name.text.trim(),
       calories: int.tryParse(_calories.text) ?? widget.initial.calories,
@@ -78,7 +74,7 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
       servingSize: double.tryParse(_serving.text),
     );
 
-    // 2. Analyse nutritional values against user's health conditions
+    // Health warning check
     final healthVm = context.read<HealthWarningViewModel>();
     final warnings = healthVm.analyzeValues(
       foodName: confirmed.productName.isNotEmpty
@@ -92,18 +88,13 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
       sodium: widget.initial.sodium,
     );
 
-    // 3. Show warning dialog if needed
     if (warnings.isNotEmpty && context.mounted) {
       final proceed = await showHealthWarningDialog(context, warnings);
       if (!proceed || !context.mounted) return;
     }
 
-    // 4. Proceed with save
-    final ok = await vm.saveScanResult(
-      uid: uid,
-      confirmed: confirmed,
-      addToFoodLog: _addToFoodLog,
-    );
+    // saveScanResult signature only takes uid + confirmed
+    final ok = await vm.saveScanResult(uid: uid, confirmed: confirmed);
     if (ok && context.mounted) Navigator.pop(context);
   }
 
@@ -111,8 +102,8 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
     final vm = context.watch<ScanViewModel>();
-    final confColor = _confidenceColor(widget.initial.extractionConfidence, c);
     final healthVm = context.watch<HealthWarningViewModel>();
+    final confColor = _confidenceColor(widget.initial.extractionConfidence, c);
 
     return AppBottomSheet(
       subtitle: Column(
@@ -244,13 +235,14 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
               Switch(
                 value: _addToFoodLog,
                 onChanged: (v) => setState(() => _addToFoodLog = v),
-                activeColor: c.primary,
+                activeThumbColor: c.primary, // fixed: was activeColor
+                activeTrackColor: c.track,
               ),
             ],
           ),
         ),
 
-        // Health conditions active badge
+        // Health conditions badge
         if (healthVm.hasConditions) ...[
           const SizedBox(height: AppSpacing.md),
           Container(

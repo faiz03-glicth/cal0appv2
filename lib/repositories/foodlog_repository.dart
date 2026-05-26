@@ -1,5 +1,5 @@
 // lib/repositories/foodlog_repository.dart
-import 'package:cal0appv2/models/foodlog_model.dart';
+import 'package:cal0appv2/models/logging/foodlog_model.dart';
 import 'package:cal0appv2/services/logs/foodlog_services.dart';
 
 class FoodLogRepository {

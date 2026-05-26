@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cal0appv2/models/foodlog_model.dart';
+import 'package:cal0appv2/models/logging/foodlog_model.dart';
 import 'package:cal0appv2/models/nutrient_totals.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
 import 'package:cal0appv2/repositories/nutrition_repository.dart';

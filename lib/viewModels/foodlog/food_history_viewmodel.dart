@@ -1,6 +1,6 @@
 // lib/viewModels/foodlog/food_history_viewmodel.dart
 import 'package:flutter/material.dart';
-import 'package:cal0appv2/models/foodlog_model.dart';
+import 'package:cal0appv2/models/logging/foodlog_model.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
 
 enum HistoryFilter { all, manual, scanned }

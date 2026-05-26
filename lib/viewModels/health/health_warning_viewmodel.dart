@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cal0appv2/models/health/health_condition.dart';
-import 'package:cal0appv2/models/foodlog_model.dart';
+import 'package:cal0appv2/models/logging/foodlog_model.dart';
 import 'package:cal0appv2/repositories/health_warning_repository.dart';
 import 'package:cal0appv2/repositories/user_repository.dart';
 

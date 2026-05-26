@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
-import 'package:cal0appv2/models/foodlog_model.dart';
+import 'package:cal0appv2/models/logging/foodlog_model.dart';
 import 'package:cal0appv2/services/cache/recent_food_cache.dart';
 import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';

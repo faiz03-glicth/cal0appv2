@@ -12,7 +12,7 @@ class BarcodeFoodModel {
   final double? servingSize;
   final String servingUnit;
   final String? ingredientText;
-  final bool isVerified; // has nutriments data
+  final bool isVerified;
   final DateTime cachedAt;
 
   const BarcodeFoodModel({
@@ -38,6 +38,21 @@ class BarcodeFoodModel {
   String get displayName =>
       productName.isNotEmpty ? productName : 'Unknown Product';
 
+  String get displayBrand => brandName ?? '';
+
+  /// Scale nutrients from per-100g to per-serving grams
+  Map<String, dynamic> toFoodLogMap(double servingGrams) {
+    final factor = servingGrams / 100.0;
+    return {
+      'calories': calories != null ? (calories! * factor).round() : 0,
+      'protein': protein != null ? protein! * factor : 0.0,
+      'carbs': carbs != null ? carbs! * factor : 0.0,
+      'fat': fat != null ? fat! * factor : 0.0,
+      'sugar': sugar != null ? sugar! * factor : 0.0,
+      'sodium': sodium != null ? sodium! * factor : 0.0,
+    };
+  }
+
   /// Scale nutrients from per-100g to per-serving
   BarcodeFoodModel scaledToServing(double servingGrams) {
     final factor = servingGrams / 100.0;
@@ -58,7 +73,6 @@ class BarcodeFoodModel {
     final product = json['product'] as Map<String, dynamic>? ?? {};
     final nutriments = product['nutriments'] as Map<String, dynamic>? ?? {};
 
-    // OpenFoodFacts stores values per 100g with _100g suffix
     double? _n(String key) {
       final v = nutriments['${key}_100g'] ?? nutriments[key];
       if (v == null) return null;

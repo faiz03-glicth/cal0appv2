@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:cal0appv2/models/scan_result_model.dart';
-import 'package:cal0appv2/models/logging/foodlog_model.dart';
+import 'package:cal0appv2/models/foodlog_model.dart';
 import 'package:cal0appv2/repositories/scan_repository.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
 import 'package:cal0appv2/services/scan/ai_service.dart';

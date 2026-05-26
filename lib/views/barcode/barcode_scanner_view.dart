@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
-import 'package:cal0appv2/viewmodels/scan/barcode_viewmodel.dart';
+import 'package:cal0appv2/viewModels/scan/barcode_viewmodel.dart';
 import 'package:cal0appv2/views/barcode/barcode_result_sheet.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 
@@ -26,6 +26,15 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
     _controller = MobileScannerController(
       detectionSpeed: DetectionSpeed.noDuplicates,
       returnImage: false,
+      formats: [
+        BarcodeFormat.ean13,
+        BarcodeFormat.ean8,
+        BarcodeFormat.upcA,
+        BarcodeFormat.upcE,
+        BarcodeFormat.code128,
+        BarcodeFormat.code39,
+        BarcodeFormat.qrCode,
+      ],
     );
   }
 
@@ -51,6 +60,10 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
 
   Future<void> _onDetect(BarcodeCapture capture) async {
     final barcode = capture.barcodes.firstOrNull?.rawValue;
+
+    debugPrint('📸 Capture received, barcodes: ${capture.barcodes.length}');
+    if (barcode != null) debugPrint('📸 Raw value: $barcode');
+
     if (barcode == null || _sheetOpen) return;
 
     final vm = context.read<BarcodeViewModel>();
@@ -61,7 +74,8 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
     if (!mounted) return;
 
     if (vm.state == BarcodeScanState.found ||
-        vm.state == BarcodeScanState.notFound) {
+        vm.state == BarcodeScanState.notFound ||
+        vm.state == BarcodeScanState.failed) {
       _controller.stop();
       _sheetOpen = true;
       await _showResultSheet();
@@ -109,13 +123,8 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
       ),
       body: Stack(
         children: [
-          // Camera
           MobileScanner(controller: _controller, onDetect: _onDetect),
-
-          // Scanning overlay
           _ScanOverlay(),
-
-          // Status indicator
           Positioned(
             bottom: 40,
             left: 0,
@@ -151,7 +160,6 @@ class _OverlayPainter extends CustomPainter {
       height: scanAreaSize * 0.6,
     );
 
-    // Dark overlay with cutout
     canvas.drawPath(
       Path.combine(
         PathOperation.difference,
@@ -162,7 +170,6 @@ class _OverlayPainter extends CustomPainter {
       paint,
     );
 
-    // Corner guides
     final guidePaint = Paint()
       ..color = Colors.white
       ..strokeWidth = 3
@@ -209,6 +216,20 @@ class _StatusBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     if (state == BarcodeScanState.idle) return const SizedBox.shrink();
 
+    final String label;
+    final bool showSpinner;
+
+    switch (state) {
+      case BarcodeScanState.scanning:
+        label = 'Looking up product...';
+        showSpinner = true;
+      case BarcodeScanState.saving:
+        label = 'Saving...';
+        showSpinner = true;
+      default:
+        return const SizedBox.shrink();
+    }
+
     return Center(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -219,7 +240,7 @@ class _StatusBanner extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (state == BarcodeScanState.scanning)
+            if (showSpinner)
               const SizedBox(
                 width: 16,
                 height: 16,
@@ -229,11 +250,10 @@ class _StatusBanner extends StatelessWidget {
                 ),
               ),
             const SizedBox(width: 8),
-            Text(switch (state) {
-              BarcodeScanState.scanning => 'Looking up product...',
-              BarcodeScanState.saving => 'Saving...',
-              _ => '',
-            }, style: const TextStyle(color: Colors.white, fontSize: 13)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
           ],
         ),
       ),

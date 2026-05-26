@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
-import 'package:cal0appv2/viewModels/barcode_viewmodel.dart';
+import 'package:cal0appv2/viewModels/scan/barcode_viewmodel.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 import 'package:cal0appv2/views/widgets/app_text_field.dart';
 import 'package:cal0appv2/views/widgets/app_primary_button.dart';
-import 'package:cal0appv2/views/widgets/app_bottom_sheet.dart';
 import 'package:cal0appv2/views/widgets/sheet_handle.dart';
 
 class BarcodeResultSheet extends StatefulWidget {
@@ -29,7 +28,6 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
     final vm = context.read<BarcodeViewModel>();
     final food = vm.foundFood;
 
-    // Default serving: use product serving size or 100g
     final defaultServing = food?.servingSize ?? 100.0;
     final scaled = food?.toFoodLogMap(defaultServing);
 
@@ -62,7 +60,6 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
     super.dispose();
   }
 
-  // Recalculate nutrition when serving size changes
   void _onServingChanged(String value) {
     final vm = context.read<BarcodeViewModel>();
     final food = vm.foundFood;
@@ -102,7 +99,7 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
     final vm = context.watch<BarcodeViewModel>();
-    final isNotFound = vm.state == BarcodeState.notFound;
+    final isNotFound = vm.state == BarcodeScanState.notFound;
     final food = vm.foundFood;
 
     return Padding(
@@ -130,7 +127,6 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
               const SheetHandle(),
               const SizedBox(height: AppSpacing.lg),
 
-              // Product info header
               if (isNotFound)
                 _NotFoundBanner(barcode: vm.lastBarcode ?? '')
               else if (food != null)
@@ -138,7 +134,6 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
 
               const SizedBox(height: AppSpacing.lg),
 
-              // Serving size
               AppTextField(
                 controller: _servingCtrl,
                 label: 'Serving Size',
@@ -149,7 +144,6 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
               ),
               const SizedBox(height: AppSpacing.md),
 
-              // Product name
               AppTextField(
                 controller: _nameCtrl,
                 label: 'Product Name',
@@ -166,7 +160,6 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
               ),
               const SizedBox(height: AppSpacing.sm),
 
-              // Calories full width
               AppTextField(
                 controller: _calCtrl,
                 hint: 'Calories (kcal)',
@@ -175,7 +168,6 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
               ),
               const SizedBox(height: AppSpacing.sm),
 
-              // Macros row
               Row(
                 children: [
                   Expanded(
@@ -209,7 +201,6 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
 
               const SizedBox(height: AppSpacing.xl),
 
-              // Action buttons
               Row(
                 children: [
                   Expanded(
@@ -249,7 +240,7 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
 }
 
 class _ProductBanner extends StatelessWidget {
-  final BarcodeFoodModel food;
+  final food;
   const _ProductBanner({required this.food});
 
   @override
@@ -285,7 +276,6 @@ class _ProductBanner extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: AppSpacing.xs),
-              // Verification badge
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.sm,

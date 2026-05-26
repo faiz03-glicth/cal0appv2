@@ -5,7 +5,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:cal0appv2/views/widgets/c0_app_bar.dart';
 import 'package:cal0appv2/views/widgets/scan_confirm_sheet.dart';
+import 'package:cal0appv2/views/barcode/barcode_scanner_view.dart';
 import 'package:cal0appv2/viewModels/scan/scan_viewmodel.dart';
+import 'package:cal0appv2/viewModels/scan/barcode_viewmodel.dart';
 
 class ScanTab extends StatelessWidget {
   const ScanTab({super.key});
@@ -44,7 +46,7 @@ class ScanTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Camera / Gallery buttons ───────────────────────────────────
+            // ── Camera / Gallery / Barcode buttons ─────────────────────────
             Row(
               children: [
                 Expanded(
@@ -60,7 +62,7 @@ class ScanTab extends StatelessWidget {
                         : () => _pickAndScan(context, ImageSource.camera),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
@@ -74,21 +76,28 @@ class ScanTab extends StatelessWidget {
                         : () => _pickAndScan(context, ImageSource.gallery),
                   ),
                 ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: c.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.barcode_reader),
-                  label: const Text('Barcode'),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const BarcodeScannerView(),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: c.primary,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.barcode_reader),
+                label: const Text('Scan Barcode'),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChangeNotifierProvider.value(
+                      value: context.read<BarcodeViewModel>(),
+                      child: const BarcodeScannerView(),
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
             const SizedBox(height: 20),
 
@@ -143,7 +152,6 @@ class ScanTab extends StatelessWidget {
             if (vm.scannedText != null &&
                 !vm.isScanning &&
                 !vm.isAnalyzing) ...[
-              // AI verdict banner
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
@@ -182,15 +190,12 @@ class ScanTab extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
-              // Extracted nutrition card
               if (vm.extractedResult != null &&
                   vm.extractedResult!.hasUsefulData)
                 _nutritionCard(vm, c),
 
               const SizedBox(height: 12),
 
-              // Flagged ingredients — reads from extractedResult, not a
-              // separate getter that no longer exists
               if (vm.hasSuspiciousIngredients &&
                   vm.extractedResult?.ingredientText.isNotEmpty == true) ...[
                 Text(
@@ -233,7 +238,6 @@ class ScanTab extends StatelessWidget {
                 const SizedBox(height: 12),
               ],
 
-              // Low confidence warning
               if (vm.extractedResult != null &&
                   vm.extractedResult!.extractionConfidence < 0.4)
                 Container(
@@ -263,7 +267,6 @@ class ScanTab extends StatelessWidget {
                   ),
                 ),
 
-              // Action buttons
               Row(
                 children: [
                   Expanded(
@@ -297,7 +300,6 @@ class ScanTab extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Raw OCR text collapsible
               ExpansionTile(
                 tilePadding: EdgeInsets.zero,
                 title: Text(
@@ -334,8 +336,6 @@ class ScanTab extends StatelessWidget {
       ),
     );
   }
-
-  // ── UI helpers ─────────────────────────────────────────────────────────────
 
   Widget _loadingCard(String label, C0Colors c) => Container(
     margin: const EdgeInsets.only(bottom: 12),

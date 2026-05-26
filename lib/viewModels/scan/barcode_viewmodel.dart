@@ -1,22 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:cal0appv2/models/barcode_food_model.dart';
-import 'package:cal0appv2/models/logging/foodlog_model.dart';
+import 'package:cal0appv2/models/foodlog_model.dart';
 import 'package:cal0appv2/repositories/barcode_repository.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
-import 'package:cal0appv2/services/food/open_food_facts_service.dart';
 import 'package:cal0appv2/services/logging/activity_logger.dart';
 import 'package:cal0appv2/models/logging/activity_log.dart';
 
-/// Follows exact same pattern as ScanViewModel and FoodLogViewModel
-enum BarcodeState {
-  idle, // Awaiting scan
-  looking, // Network/cache lookup in progress
-  found, // Product found — show confirm sheet
-  notFound, // Product not in database — show manual entry
-  failed, // Network error
-  saving, // Writing to Firestore
-}
+enum BarcodeScanState { idle, scanning, found, notFound, failed, saving }
 
 class BarcodeViewModel extends ChangeNotifier {
   final BarcodeRepository _barcodeRepo;
@@ -31,48 +22,53 @@ class BarcodeViewModel extends ChangeNotifier {
 
   // ── State ────────────────────────────────────────────────────────────
 
-  BarcodeState _state = BarcodeState.idle;
+  BarcodeScanState _state = BarcodeScanState.idle;
   BarcodeFoodModel? _foundFood;
   String? _lastBarcode;
   String? _errorMessage;
   String? _successMessage;
 
-  // Debounce — prevents processing same barcode twice in quick succession
+  // Debounce
   String? _processingBarcode;
   DateTime? _lastScanTime;
   static const _debounce = Duration(seconds: 2);
 
   // ── Getters ───────────────────────────────────────────────────────────
 
-  BarcodeState get state => _state;
+  BarcodeScanState get state => _state;
   BarcodeFoodModel? get foundFood => _foundFood;
   String? get lastBarcode => _lastBarcode;
   String? get errorMessage => _errorMessage;
   String? get successMessage => _successMessage;
 
-  bool get isIdle => _state == BarcodeState.idle;
-  bool get isLooking => _state == BarcodeState.looking;
-  bool get isSaving => _state == BarcodeState.saving;
-  bool get canScan => _state == BarcodeState.idle;
+  bool get isIdle => _state == BarcodeScanState.idle;
+  bool get isLooking => _state == BarcodeScanState.scanning;
+  bool get isSaving => _state == BarcodeScanState.saving;
+  bool get canScan => _state == BarcodeScanState.idle;
 
-  // ── Barcode detected from scanner ─────────────────────────────────────
+  // ── Barcode detected ──────────────────────────────────────────────────
 
   Future<void> onBarcodeDetected(String rawBarcode) async {
-    // Debounce: skip if same barcode scanned again too quickly
+    // ADD THIS LINE
+    debugPrint('🔍 Barcode detected: $rawBarcode');
+
     final now = DateTime.now();
     if (_processingBarcode == rawBarcode &&
         _lastScanTime != null &&
         now.difference(_lastScanTime!) < _debounce) {
+      debugPrint('⏭ Debounce skip: $rawBarcode');
       return;
     }
-    if (!canScan) return;
-
+    if (!canScan) {
+      debugPrint('⏭ Cannot scan, state: $_state');
+      return;
+    }
     _processingBarcode = rawBarcode;
     _lastScanTime = now;
     _lastBarcode = rawBarcode;
     _errorMessage = null;
     _successMessage = null;
-    _setState(BarcodeState.looking);
+    _setState(BarcodeScanState.scanning);
 
     ActivityLogger.instance.log(
       ActivityEventType.scanInitiated,
@@ -82,24 +78,22 @@ class BarcodeViewModel extends ChangeNotifier {
     final result = await _barcodeRepo.lookup(rawBarcode);
 
     switch (result) {
-      case BarcodeFound(:final food):
+      case BarcodeLookupSuccess(:final food):
         _foundFood = food;
-        _setState(BarcodeState.found);
+        _setState(BarcodeScanState.found);
 
-      case BarcodeNotFound():
+      case BarcodeLookupNotFound():
         _foundFood = null;
-        _setState(BarcodeState.notFound);
+        _setState(BarcodeScanState.notFound);
 
-      case BarcodeLookupFailed(:final message):
+      case BarcodeLookupError(:final message):
         _errorMessage = message;
-        _setState(BarcodeState.failed);
+        _setState(BarcodeScanState.failed);
     }
   }
 
   // ── Save to food log ──────────────────────────────────────────────────
 
-  /// Called from BarcodeResultSheet after user confirms/edits values
-  /// Mirrors ScanViewModel.saveScanResult() pattern
   Future<bool> saveToFoodLog({
     required String uid,
     required String foodName,
@@ -113,7 +107,7 @@ class BarcodeViewModel extends ChangeNotifier {
   }) async {
     if (uid.isEmpty) return false;
 
-    _setState(BarcodeState.saving);
+    _setState(BarcodeScanState.saving);
     _errorMessage = null;
 
     try {
@@ -147,29 +141,28 @@ class BarcodeViewModel extends ChangeNotifier {
       );
 
       _successMessage = '${log.foodLogName} added to diary';
-      _setState(BarcodeState.idle);
+      _setState(BarcodeScanState.idle);
       return true;
     } catch (e) {
       _errorMessage = 'Failed to save: $e';
       ActivityLogger.instance.logError('BARCODE_SAVE_ERROR', e);
-      _setState(BarcodeState.failed);
+      _setState(BarcodeScanState.failed);
       return false;
     }
   }
 
   // ── Reset ─────────────────────────────────────────────────────────────
 
-  /// Called when user dismisses the result sheet or wants to scan again
   void reset() {
     _foundFood = null;
     _lastBarcode = null;
     _errorMessage = null;
     _successMessage = null;
     _processingBarcode = null;
-    _setState(BarcodeState.idle);
+    _setState(BarcodeScanState.idle);
   }
 
-  void _setState(BarcodeState state) {
+  void _setState(BarcodeScanState state) {
     _state = state;
     notifyListeners();
   }

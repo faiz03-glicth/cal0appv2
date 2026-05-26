@@ -4,20 +4,20 @@ import 'package:provider/provider.dart';
 import 'package:cal0appv2/viewModels/wrapper/wrapper.dart';
 import 'package:cal0appv2/services/auth/secure_config.dart';
 import 'package:cal0appv2/services/firebase/firebase_options.dart';
-import '/../viewModels/scan/scan_viewmodel.dart';
+import 'package:cal0appv2/viewModels/scan/scan_viewmodel.dart';
+import 'package:cal0appv2/viewModels/scan/barcode_viewmodel.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cal0appv2/viewModels/usermodel/user_viewmodel.dart';
-import '/../services/logs/debuglog_services.dart';
-import '/../viewModels/theme/theme_viewmodel.dart';
+import 'package:cal0appv2/services/logs/debuglog_services.dart';
+import 'package:cal0appv2/viewModels/theme/theme_viewmodel.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '/../viewModels/foodlog/foodlog_viewmodel.dart';
+import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
 import 'package:cal0appv2/viewModels/dashboard/dashboard_viewmodel.dart';
-import '/../viewModels/viewauth/register_viewmodel.dart';
-import '/../viewModels/foodlog/food_history_viewmodel.dart';
+import 'package:cal0appv2/viewModels/viewauth/register_viewmodel.dart';
+import 'package:cal0appv2/viewModels/foodlog/food_history_viewmodel.dart';
 import 'package:cal0appv2/viewModels/health/health_warning_viewmodel.dart';
-import 'package:cal0appv2/views/barcode/barcode_scanner_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,7 +61,6 @@ class _AppRoot extends StatefulWidget {
 }
 
 class _AppRootState extends State<_AppRoot> {
-  // Create instances here so we can wire callbacks before build
   final _authVm = AuthViewModel();
   final _foodLogVm = FoodLogViewModel();
   final _dashboardVm = DashboardViewModel();
@@ -70,7 +69,6 @@ class _AppRootState extends State<_AppRoot> {
   @override
   void initState() {
     super.initState();
-    // Wire sign-out callbacks so state is always clean after logout
     _authVm.addSignOutCallback(_foodLogVm.clearForLogout);
     _authVm.addSignOutCallback(_dashboardVm.clearForLogout);
     _authVm.addSignOutCallback(_healthVm.clearForLogout);
@@ -89,6 +87,7 @@ class _AppRootState extends State<_AppRoot> {
         ChangeNotifierProvider(create: (_) => ThemeViewModel()),
         ChangeNotifierProvider(create: (_) => ScanViewModel()),
         ChangeNotifierProvider(create: (_) => FoodHistoryViewModel()),
+        // BarcodeViewModel registered here so it's available app-wide
         ChangeNotifierProvider(create: (_) => BarcodeViewModel()),
       ],
       child: Consumer<ThemeViewModel>(

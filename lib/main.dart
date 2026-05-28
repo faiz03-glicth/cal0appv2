@@ -11,7 +11,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cal0appv2/viewModels/usermodel/user_viewmodel.dart';
 import 'package:cal0appv2/services/logs/debuglog_services.dart';
 import 'package:cal0appv2/viewModels/theme/theme_viewmodel.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
 import 'package:cal0appv2/viewModels/dashboard/dashboard_viewmodel.dart';
@@ -29,7 +28,7 @@ void main() async {
 
   LogService.info('Env loading');
   try {
-    await dotenv.load(fileName: 'crypt.env');
+    // await dotenv.load(fileName: 'crypt.env');
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );

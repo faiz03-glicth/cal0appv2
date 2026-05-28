@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import 'package:cal0appv2/models/barcode_food_model.dart';
+import 'package:cal0appv2/models/off_food_result.dart';
 import 'package:cal0appv2/models/foodlog_model.dart';
-import 'package:cal0appv2/repositories/barcode_repository.dart';
+import 'package:cal0appv2/repositories/off_food_repository.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
 import 'package:cal0appv2/services/logging/activity_logger.dart';
 import 'package:cal0appv2/models/logging/activity_log.dart';
@@ -10,35 +10,34 @@ import 'package:cal0appv2/models/logging/activity_log.dart';
 enum BarcodeScanState { idle, scanning, found, notFound, failed, saving }
 
 class BarcodeViewModel extends ChangeNotifier {
-  final BarcodeRepository _barcodeRepo;
+  final OFFFoodRepository _foodRepo;
   final FoodLogRepository _foodLogRepo;
   final _uuid = const Uuid();
 
   BarcodeViewModel({
-    BarcodeRepository? barcodeRepository,
+    OFFFoodRepository? foodRepository,
     FoodLogRepository? foodLogRepository,
-  }) : _barcodeRepo = barcodeRepository ?? BarcodeRepository(),
+    // Legacy injection name — ignored, kept for DI compat
+    @Deprecated('Use foodRepository') dynamic barcodeRepository,
+  }) : _foodRepo = foodRepository ?? OFFFoodRepository(),
        _foodLogRepo = foodLogRepository ?? FoodLogRepository();
 
   // ── State ────────────────────────────────────────────────────────────
 
   BarcodeScanState _state = BarcodeScanState.idle;
-  BarcodeFoodModel? _foundFood;
+  OFFFoodResult? _foundFood;
   String? _lastBarcode;
   String? _errorMessage;
   String? _successMessage;
 
-  // Debounce — tracks the barcode currently being processed
   String? _processingBarcode;
   DateTime? _lastScanTime;
-  // Debounce window: long enough to avoid double-fires, short enough to not
-  // block legitimate re-scans after a reset.
   static const _debounce = Duration(milliseconds: 1500);
 
   // ── Getters ───────────────────────────────────────────────────────────
 
   BarcodeScanState get state => _state;
-  BarcodeFoodModel? get foundFood => _foundFood;
+  OFFFoodResult? get foundFood => _foundFood;
   String? get lastBarcode => _lastBarcode;
   String? get errorMessage => _errorMessage;
   String? get successMessage => _successMessage;
@@ -46,9 +45,6 @@ class BarcodeViewModel extends ChangeNotifier {
   bool get isIdle => _state == BarcodeScanState.idle;
   bool get isLooking => _state == BarcodeScanState.scanning;
   bool get isSaving => _state == BarcodeScanState.saving;
-
-  // canScan: only block when we are actively looking up OR already have a result
-  // waiting for the user — NOT when we are idle.
   bool get canScan => _state == BarcodeScanState.idle;
 
   // ── Barcode detected ──────────────────────────────────────────────────
@@ -58,15 +54,12 @@ class BarcodeViewModel extends ChangeNotifier {
       '🔍 BarcodeViewModel.onBarcodeDetected: $rawBarcode  state=$_state',
     );
 
-    // Guard 1: already showing a result or saving — ignore until reset
     if (!canScan) {
-      debugPrint('⏭ Cannot scan — state is $_state');
+      debugPrint('⏭ VM not ready — state: $_state');
       return;
     }
 
     final now = DateTime.now();
-
-    // Guard 2: debounce — same barcode within the window
     if (_processingBarcode == rawBarcode &&
         _lastScanTime != null &&
         now.difference(_lastScanTime!) < _debounce) {
@@ -74,7 +67,6 @@ class BarcodeViewModel extends ChangeNotifier {
       return;
     }
 
-    // Commit to processing this barcode
     _processingBarcode = rawBarcode;
     _lastScanTime = now;
     _lastBarcode = rawBarcode;
@@ -87,27 +79,21 @@ class BarcodeViewModel extends ChangeNotifier {
       errorMessage: 'barcode=$rawBarcode',
     );
 
-    try {
-      final result = await _barcodeRepo.lookup(rawBarcode);
+    final result = await _foodRepo.lookupBarcode(rawBarcode);
 
-      switch (result) {
-        case BarcodeLookupSuccess(:final food):
-          _foundFood = food;
-          _setState(BarcodeScanState.found);
+    switch (result) {
+      case FoodLookupSuccess(:final food):
+        _foundFood = food;
+        _setState(BarcodeScanState.found);
 
-        case BarcodeLookupNotFound():
-          _foundFood = null;
-          _setState(BarcodeScanState.notFound);
+      case FoodLookupNotFound():
+        _foundFood = null;
+        _setState(BarcodeScanState.notFound);
 
-        case BarcodeLookupError(:final message):
-          _errorMessage = message;
-          debugPrint('❌ Barcode lookup error: $message');
-          _setState(BarcodeScanState.failed);
-      }
-    } catch (e) {
-      _errorMessage = 'Lookup failed: $e';
-      debugPrint('❌ Barcode lookup exception: $e');
-      _setState(BarcodeScanState.failed);
+      case FoodLookupError(:final message):
+        _errorMessage = message;
+        debugPrint('❌ Barcode lookup error: $message');
+        _setState(BarcodeScanState.failed);
     }
   }
 
@@ -122,15 +108,16 @@ class BarcodeViewModel extends ChangeNotifier {
     required double fat,
     double sugar = 0,
     double sodium = 0,
+    double saturatedFat = 0,
     double? servingSize,
-    DateTime? targetDate, // ← ADD THIS
+    DateTime? targetDate,
   }) async {
     if (uid.isEmpty) return false;
     _setState(BarcodeScanState.saving);
     _errorMessage = null;
 
     try {
-      final logDate = targetDate ?? DateTime.now(); // ← USE IT HERE
+      final logDate = targetDate ?? DateTime.now();
       final log = FoodLogModel(
         foodLogID: _uuid.v4(),
         userId: uid,
@@ -138,13 +125,14 @@ class BarcodeViewModel extends ChangeNotifier {
             ? (_foundFood?.displayName ?? 'Scanned Product')
             : foodName.trim(),
         calorieIntake: calories,
-        foodLogDate: logDate, // ← was DateTime.now()
-        loggedAt: DateTime.now(), // loggedAt stays as now
+        foodLogDate: logDate,
+        loggedAt: DateTime.now(),
         protein: protein,
         carbs: carbs,
         fats: fat,
         sugar: sugar,
         sodium: sodium,
+        saturatedFat: saturatedFat,
         source: FoodLogSource.scanned,
         servingSize: servingSize,
         servingUnit: _foundFood?.servingUnit ?? 'g',
@@ -180,7 +168,7 @@ class BarcodeViewModel extends ChangeNotifier {
     _errorMessage = null;
     _successMessage = null;
     _processingBarcode = null;
-    _lastScanTime = null; // ← clear time so next scan isn't debounced
+    _lastScanTime = null;
     _setState(BarcodeScanState.idle);
   }
 

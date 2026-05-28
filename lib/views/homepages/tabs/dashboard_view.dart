@@ -8,6 +8,7 @@ import '/../views/widgets/food_diary.dart';
 import '/../views/widgets/date_strip.dart';
 import '/../views/widgets/c0_app_bar.dart';
 import '/../views/widgets/calorie_ring.dart';
+import '/../views/widgets/tdee_info_card.dart';
 import '/../viewModels/foodlog/foodlog_viewmodel.dart';
 import '/../viewModels/dashboard/dashboard_viewmodel.dart';
 import '/../views/widgets/nutrient_section.dart';
@@ -56,15 +57,12 @@ class _DashboardTabState extends State<DashboardTab> {
     await context.read<FoodLogViewModel>().changeSelectedDate(date, uid: uid);
   }
 
-  // Which sections are visible based on selected filter
   bool get _showCalories =>
       _activeFilter == DashboardFilter.all ||
       _activeFilter == DashboardFilter.calories;
-
   bool get _showMacros =>
       _activeFilter == DashboardFilter.all ||
       _activeFilter == DashboardFilter.macros;
-
   bool get _showNutrients =>
       _activeFilter == DashboardFilter.all ||
       _activeFilter == DashboardFilter.nutrients;
@@ -121,7 +119,7 @@ class _DashboardTabState extends State<DashboardTab> {
                       ),
                     ),
 
-                    // ── UC015 AF1: Content filter chips ─────────────────
+                    // ── Filter chips ────────────────────────────────────
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
                         AppSpacing.xl,
@@ -135,7 +133,7 @@ class _DashboardTabState extends State<DashboardTab> {
                       ),
                     ),
 
-                    // ── Calorie ring (hidden when macros/nutrients only) ─
+                    // ── Calorie ring ────────────────────────────────────
                     if (_showCalories)
                       Selector<FoodLogViewModel, int>(
                         selector: (_, vm) => vm.totalCalories,
@@ -144,6 +142,11 @@ class _DashboardTabState extends State<DashboardTab> {
                           target: dashVm.calorieTarget,
                         ),
                       ),
+
+                    // ── TDEE info card ──────────────────────────────────
+                    if (_showCalories) const TdeeInfoCard(),
+
+                    if (_showCalories) const SizedBox(height: AppSpacing.md),
 
                     // ── Macro row ───────────────────────────────────────
                     if (_showMacros)
@@ -157,10 +160,12 @@ class _DashboardTabState extends State<DashboardTab> {
                         ),
                       ),
 
-                    // ── Nutrient section (sugar, sodium, etc.) ──────────
+                    if (_showMacros) const SizedBox(height: AppSpacing.md),
+
+                    // ── Full nutrient panel ─────────────────────────────
                     if (_showNutrients) const NutrientSection(),
 
-                    // ── Food diary (always visible) ─────────────────────
+                    // ── Food diary ──────────────────────────────────────
                     const FoodDiary(),
 
                     const SizedBox(height: 80),
@@ -172,7 +177,7 @@ class _DashboardTabState extends State<DashboardTab> {
   }
 }
 
-// ── UC015 AF1: Filter row widget ───────────────────────────────────────────
+// ── Filter row ─────────────────────────────────────────────────────────────
 
 class _DashboardFilterRow extends StatelessWidget {
   final DashboardFilter active;

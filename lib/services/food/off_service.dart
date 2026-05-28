@@ -38,7 +38,7 @@ class OFFService {
     ProductField.SERVING_QUANTITY,
     ProductField.INGREDIENTS_TEXT,
     ProductField.IMAGE_FRONT_URL,
-    ProductField.NUTRISCORE_GRADE,
+    // ProductField.NUTRISCORE_DATA,
     ProductField.ECOSCORE_GRADE,
     // ProductField.COMPLETENESS,
   ];
@@ -138,13 +138,13 @@ class OFFService {
 
   OFFFoodResult _mapProduct(Product p, {String source = 'search'}) {
     final n = p.nutriments;
-    final nutriscoreGrade = p.nutriscore;
+
     return OFFFoodResult(
       barcode: p.barcode ?? '',
       name: _productName(p),
       brand: p.brands ?? '',
       imageUrl: p.imageFrontUrl,
-      nutritionGrade: p.nutriscore?.grade?.value,
+      nutritionGrade: p.nutriscore,
       servingSize: p.servingQuantity ?? 100,
       servingUnit: 'g',
       caloriesPer100: _kcalPer100(n),

@@ -13,6 +13,12 @@ import '/../viewModels/dashboard/dashboard_viewmodel.dart';
 import '/../views/widgets/nutrient_section.dart';
 import '/../viewModels/viewauth/auth_viewmodel.dart';
 
+// ── UC015 AF1: Dashboard content filter ───────────────────────────────────
+
+enum DashboardFilter { all, calories, macros, nutrients }
+
+// ── Main tab ───────────────────────────────────────────────────────────────
+
 class DashboardTab extends StatefulWidget {
   const DashboardTab({super.key});
 
@@ -21,6 +27,8 @@ class DashboardTab extends StatefulWidget {
 }
 
 class _DashboardTabState extends State<DashboardTab> {
+  DashboardFilter _activeFilter = DashboardFilter.all;
+
   @override
   void initState() {
     super.initState();
@@ -28,7 +36,6 @@ class _DashboardTabState extends State<DashboardTab> {
       if (!mounted) return;
       final uid = context.read<AuthViewModel>().currentUid ?? '';
       if (uid.isEmpty) return;
-      // loadDashboard is a no-op if user is already cached
       context.read<DashboardViewModel>().loadDashboard(uid);
       context.read<FoodLogViewModel>().loadFoodLogs(uid: uid);
     });
@@ -46,9 +53,21 @@ class _DashboardTabState extends State<DashboardTab> {
   Future<void> _onDateSelected(BuildContext context, DateTime date) async {
     final uid = context.read<AuthViewModel>().currentUid ?? '';
     if (uid.isEmpty) return;
-    // Only reload food logs — user profile doesn't change per date
     await context.read<FoodLogViewModel>().changeSelectedDate(date, uid: uid);
   }
+
+  // Which sections are visible based on selected filter
+  bool get _showCalories =>
+      _activeFilter == DashboardFilter.all ||
+      _activeFilter == DashboardFilter.calories;
+
+  bool get _showMacros =>
+      _activeFilter == DashboardFilter.all ||
+      _activeFilter == DashboardFilter.macros;
+
+  bool get _showNutrients =>
+      _activeFilter == DashboardFilter.all ||
+      _activeFilter == DashboardFilter.nutrients;
 
   @override
   Widget build(BuildContext context) {
@@ -102,33 +121,46 @@ class _DashboardTabState extends State<DashboardTab> {
                       ),
                     ),
 
-                    // ── Calorie ring ────────────────────────────────────
-                    // Selector: rebuilds ONLY when calories or target change
-                    Selector<FoodLogViewModel, int>(
-                      selector: (_, vm) => vm.totalCalories,
-                      builder: (_, cal, __) => CalorieRing(
-                        totalCalories: cal,
-                        target: dashVm.calorieTarget,
+                    // ── UC015 AF1: Content filter chips ─────────────────
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.xl,
+                        AppSpacing.md,
+                        AppSpacing.xl,
+                        0,
+                      ),
+                      child: _DashboardFilterRow(
+                        active: _activeFilter,
+                        onChanged: (f) => setState(() => _activeFilter = f),
                       ),
                     ),
+
+                    // ── Calorie ring (hidden when macros/nutrients only) ─
+                    if (_showCalories)
+                      Selector<FoodLogViewModel, int>(
+                        selector: (_, vm) => vm.totalCalories,
+                        builder: (_, cal, __) => CalorieRing(
+                          totalCalories: cal,
+                          target: dashVm.calorieTarget,
+                        ),
+                      ),
 
                     // ── Macro row ───────────────────────────────────────
-                    // Selector: rebuilds only when NutrientTotals changes
-                    Selector<FoodLogViewModel, NutrientTotals>(
-                      selector: (_, vm) => vm.totals,
-                      builder: (_, totals, __) => MacroRow(
-                        totalProtein: totals.protein,
-                        totalCarbs: totals.carbs,
-                        totalFat: totals.fat,
-                        targets: dashVm.macroTargets,
+                    if (_showMacros)
+                      Selector<FoodLogViewModel, NutrientTotals>(
+                        selector: (_, vm) => vm.totals,
+                        builder: (_, totals, __) => MacroRow(
+                          totalProtein: totals.protein,
+                          totalCarbs: totals.carbs,
+                          totalFat: totals.fat,
+                          targets: dashVm.macroTargets,
+                        ),
                       ),
-                    ),
 
                     // ── Nutrient section (sugar, sodium, etc.) ──────────
-                    // NutrientSection uses its own Selector internally
-                    const NutrientSection(),
+                    if (_showNutrients) const NutrientSection(),
 
-                    // ── Food diary ──────────────────────────────────────
+                    // ── Food diary (always visible) ─────────────────────
                     const FoodDiary(),
 
                     const SizedBox(height: 80),
@@ -136,6 +168,87 @@ class _DashboardTabState extends State<DashboardTab> {
                 ),
               ),
             ),
+    );
+  }
+}
+
+// ── UC015 AF1: Filter row widget ───────────────────────────────────────────
+
+class _DashboardFilterRow extends StatelessWidget {
+  final DashboardFilter active;
+  final ValueChanged<DashboardFilter> onChanged;
+
+  const _DashboardFilterRow({required this.active, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+
+    const filters = [
+      (DashboardFilter.all, 'All', Icons.grid_view_rounded),
+      (DashboardFilter.calories, 'Calories', Icons.local_fire_department),
+      (DashboardFilter.macros, 'Macros', Icons.bar_chart_rounded),
+      (DashboardFilter.nutrients, 'Nutrients', Icons.science_outlined),
+    ];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: filters.map((f) {
+          final isSelected = active == f.$1;
+          return Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.sm),
+            child: GestureDetector(
+              onTap: () => onChanged(f.$1),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeInOut,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.xs + 2,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected ? c.primary : c.card,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  border: Border.all(
+                    color: isSelected ? c.primary : c.divider,
+                    width: isSelected ? 1.5 : 1,
+                  ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: c.primary.withValues(alpha: 0.2),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      f.$3,
+                      size: 13,
+                      color: isSelected ? Colors.white : c.textSecondary,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      f.$2,
+                      style: AppTextStyles.caption.copyWith(
+                        color: isSelected ? Colors.white : c.textSecondary,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 }

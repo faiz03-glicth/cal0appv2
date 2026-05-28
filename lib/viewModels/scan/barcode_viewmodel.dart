@@ -123,13 +123,14 @@ class BarcodeViewModel extends ChangeNotifier {
     double sugar = 0,
     double sodium = 0,
     double? servingSize,
+    DateTime? targetDate, // ← ADD THIS
   }) async {
     if (uid.isEmpty) return false;
-
     _setState(BarcodeScanState.saving);
     _errorMessage = null;
 
     try {
+      final logDate = targetDate ?? DateTime.now(); // ← USE IT HERE
       final log = FoodLogModel(
         foodLogID: _uuid.v4(),
         userId: uid,
@@ -137,8 +138,8 @@ class BarcodeViewModel extends ChangeNotifier {
             ? (_foundFood?.displayName ?? 'Scanned Product')
             : foodName.trim(),
         calorieIntake: calories,
-        foodLogDate: DateTime.now(),
-        loggedAt: DateTime.now(),
+        foodLogDate: logDate, // ← was DateTime.now()
+        loggedAt: DateTime.now(), // loggedAt stays as now
         protein: protein,
         carbs: carbs,
         fats: fat,

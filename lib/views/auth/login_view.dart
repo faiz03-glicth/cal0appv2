@@ -6,6 +6,7 @@ import 'package:cal0appv2/views/auth/register_view.dart';
 import 'package:cal0appv2/views/widgets/app_text_field.dart';
 import 'package:cal0appv2/views/widgets/app_primary_button.dart';
 import 'package:cal0appv2/views/widgets/app_message_banner.dart';
+import 'package:cal0appv2/views/auth/forgot_password_view.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -56,6 +57,25 @@ class _LoginViewState extends State<LoginView> {
                 hint: 'Enter your password',
                 icon: Icons.lock_outline,
                 obscure: true,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ForgotPasswordView(),
+                    ),
+                  ),
+                  child: Text(
+                    'Forgot password?',
+                    style: AppTextStyles.caption.copyWith(
+                      color: C0Theme.deepSage,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
               if (vm.errorMessage != null) ...[
                 const SizedBox(height: AppSpacing.md),

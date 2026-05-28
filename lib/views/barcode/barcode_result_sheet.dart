@@ -6,6 +6,7 @@ import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 import 'package:cal0appv2/views/widgets/app_text_field.dart';
 import 'package:cal0appv2/views/widgets/app_primary_button.dart';
 import 'package:cal0appv2/views/widgets/sheet_handle.dart';
+import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
 
 class BarcodeResultSheet extends StatefulWidget {
   const BarcodeResultSheet({super.key});
@@ -82,6 +83,10 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
     final vm = context.read<BarcodeViewModel>();
     final uid = context.read<AuthViewModel>().currentUid ?? '';
 
+    // ← Read the selected date from FoodLogViewModel
+    final foodLogVm = context.read<FoodLogViewModel>();
+    final targetDate = foodLogVm.selectedDate;
+
     final ok = await vm.saveToFoodLog(
       uid: uid,
       foodName: _nameCtrl.text,
@@ -90,9 +95,14 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
       carbs: double.tryParse(_carbsCtrl.text) ?? 0,
       fat: double.tryParse(_fatCtrl.text) ?? 0,
       servingSize: double.tryParse(_servingCtrl.text),
+      targetDate: targetDate, // ← PASS IT
     );
 
-    if (ok && mounted) Navigator.pop(context);
+    if (ok && mounted) {
+      // ← Reload food logs for the selected date so diary updates immediately
+      await foodLogVm.loadFoodLogs(uid: uid);
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -113,11 +123,11 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
             top: Radius.circular(AppRadius.sheet),
           ),
         ),
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           AppSpacing.xl,
           AppSpacing.md,
           AppSpacing.xl,
-          AppSpacing.xxl,
+          AppSpacing.xxl + MediaQuery.of(context).padding.bottom,
         ),
         child: SingleChildScrollView(
           child: Column(

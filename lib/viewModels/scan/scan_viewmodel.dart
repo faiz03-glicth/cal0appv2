@@ -163,13 +163,14 @@ class ScanViewModel extends ChangeNotifier {
   Future<bool> saveScanResult({
     required String uid,
     required ScanResultModel confirmed,
+    DateTime? targetDate, // ← ADD
   }) async {
     isSaving = true;
     errorMessage = null;
     notifyListeners();
 
     try {
-      final now = DateTime.now();
+      final logDate = targetDate ?? DateTime.now();
       final log = FoodLogModel(
         foodLogID: _uuid.v4(),
         userId: uid,
@@ -177,8 +178,8 @@ class ScanViewModel extends ChangeNotifier {
             ? 'Scanned Product'
             : confirmed.productName,
         calorieIntake: confirmed.calories,
-        foodLogDate: now,
-        loggedAt: now,
+        foodLogDate: logDate, // ← was DateTime.now()
+        loggedAt: DateTime.now(),
         protein: confirmed.protein,
         carbs: confirmed.carbs,
         fats: confirmed.fat,

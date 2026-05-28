@@ -10,6 +10,7 @@ import 'package:cal0appv2/views/widgets/app_primary_button.dart';
 import 'package:cal0appv2/views/widgets/app_message_banner.dart';
 import 'package:cal0appv2/views/widgets/app_bottom_sheet.dart';
 import 'package:cal0appv2/views/widgets/health_warning_dialog.dart';
+import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
 
 class ScanConfirmSheet extends StatefulWidget {
   final ScanResultModel initial;
@@ -65,6 +66,9 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
     final uid = context.read<AuthViewModel>().currentUid ?? '';
     if (uid.isEmpty) return;
 
+    final foodLogVm = context.read<FoodLogViewModel>();
+    final targetDate = foodLogVm.selectedDate;
+
     final confirmed = widget.initial.copyWith(
       productName: _name.text.trim(),
       calories: int.tryParse(_calories.text) ?? widget.initial.calories,
@@ -93,9 +97,15 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
       if (!proceed || !context.mounted) return;
     }
 
-    // saveScanResult signature only takes uid + confirmed
-    final ok = await vm.saveScanResult(uid: uid, confirmed: confirmed);
-    if (ok && context.mounted) Navigator.pop(context);
+    final ok = await vm.saveScanResult(
+      uid: uid,
+      confirmed: confirmed,
+      targetDate: targetDate, // ← ADD
+    );
+    if (ok && context.mounted) {
+      await foodLogVm.loadFoodLogs(uid: uid); // ← Reload diary
+      Navigator.pop(context);
+    }
   }
 
   @override

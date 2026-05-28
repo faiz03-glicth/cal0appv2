@@ -48,6 +48,10 @@ class AuthService {
     return user;
   }
 
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email);
+  }
+
   Future<User?> signIn(String email, String password) async {
     final result = await _auth.signInWithEmailAndPassword(
       email: email,

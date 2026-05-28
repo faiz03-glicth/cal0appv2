@@ -23,31 +23,38 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
   late final TextEditingController _fatCtrl;
   late final TextEditingController _servingCtrl;
 
+  // Track current serving grams for rescaling
+  double _servingGrams = 100;
+
   @override
   void initState() {
     super.initState();
     final vm = context.read<BarcodeViewModel>();
     final food = vm.foundFood;
 
-    final defaultServing = food?.servingSize ?? 100.0;
-    final scaled = food?.toFoodLogMap(defaultServing);
+    _servingGrams = food?.servingSize ?? 100;
 
     _nameCtrl = TextEditingController(text: food?.displayName ?? '');
     _calCtrl = TextEditingController(
-      text: scaled?['calories']?.toString() ?? '',
+      text: food != null ? '${food.caloriesForServing(_servingGrams)}' : '',
     );
-    _proteinCtrl = TextEditingController(text: _fmt(scaled?['protein']));
-    _carbsCtrl = TextEditingController(text: _fmt(scaled?['carbs']));
-    _fatCtrl = TextEditingController(text: _fmt(scaled?['fat']));
+    _proteinCtrl = TextEditingController(
+      text: _fmt(food?.proteinForServing(_servingGrams)),
+    );
+    _carbsCtrl = TextEditingController(
+      text: _fmt(food?.carbsForServing(_servingGrams)),
+    );
+    _fatCtrl = TextEditingController(
+      text: _fmt(food?.fatForServing(_servingGrams)),
+    );
     _servingCtrl = TextEditingController(
-      text: defaultServing.toStringAsFixed(0),
+      text: _servingGrams.toStringAsFixed(0),
     );
   }
 
-  String _fmt(dynamic v) {
-    if (v == null) return '';
-    if (v is double) return v == 0 ? '' : v.toStringAsFixed(1);
-    return v.toString();
+  String _fmt(double? v) {
+    if (v == null || v == 0) return '';
+    return v < 10 ? v.toStringAsFixed(1) : v.toStringAsFixed(0);
   }
 
   @override
@@ -65,25 +72,20 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
     final vm = context.read<BarcodeViewModel>();
     final food = vm.foundFood;
     if (food == null || !food.hasNutrition) return;
-
-    final grams = double.tryParse(value);
-    if (grams == null || grams <= 0) return;
-
-    final scaled = food.toFoodLogMap(grams);
+    final g = double.tryParse(value);
+    if (g == null || g <= 0) return;
     setState(() {
-      final cal = scaled['calories'];
-      if (cal != null) _calCtrl.text = cal.toString();
-      _proteinCtrl.text = _fmt(scaled['protein']);
-      _carbsCtrl.text = _fmt(scaled['carbs']);
-      _fatCtrl.text = _fmt(scaled['fat']);
+      _servingGrams = g;
+      _calCtrl.text = '${food.caloriesForServing(g)}';
+      _proteinCtrl.text = _fmt(food.proteinForServing(g));
+      _carbsCtrl.text = _fmt(food.carbsForServing(g));
+      _fatCtrl.text = _fmt(food.fatForServing(g));
     });
   }
 
   Future<void> _save() async {
     final vm = context.read<BarcodeViewModel>();
     final uid = context.read<AuthViewModel>().currentUid ?? '';
-
-    // ← Read the selected date from FoodLogViewModel
     final foodLogVm = context.read<FoodLogViewModel>();
     final targetDate = foodLogVm.selectedDate;
 
@@ -95,11 +97,10 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
       carbs: double.tryParse(_carbsCtrl.text) ?? 0,
       fat: double.tryParse(_fatCtrl.text) ?? 0,
       servingSize: double.tryParse(_servingCtrl.text),
-      targetDate: targetDate, // ← PASS IT
+      targetDate: targetDate,
     );
 
     if (ok && mounted) {
-      // ← Reload food logs for the selected date so diary updates immediately
       await foodLogVm.loadFoodLogs(uid: uid);
       Navigator.pop(context);
     }
@@ -138,19 +139,44 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
               const SizedBox(height: AppSpacing.lg),
 
               if (isNotFound)
-                _NotFoundBanner(barcode: vm.lastBarcode ?? '')
+                _NotFoundBanner(barcode: vm.lastBarcode ?? '', c: c)
               else if (food != null)
-                _ProductBanner(food: food),
+                _ProductBanner(food: food, c: c),
 
               const SizedBox(height: AppSpacing.lg),
 
-              AppTextField(
-                controller: _servingCtrl,
-                label: 'Serving Size',
-                hint: 'grams (g)',
-                icon: Icons.straighten,
-                isNumber: true,
-                onChanged: _onServingChanged,
+              // Serving size
+              Row(
+                children: [
+                  Expanded(
+                    child: AppTextField(
+                      controller: _servingCtrl,
+                      label: 'Serving Size',
+                      hint: 'grams (g)',
+                      icon: Icons.straighten,
+                      isNumber: true,
+                      onChanged: _onServingChanged,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    child: Text(
+                      'g',
+                      style: AppTextStyles.caption.copyWith(
+                        color: c.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: AppSpacing.md),
 
@@ -209,8 +235,67 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
                 ],
               ),
 
-              const SizedBox(height: AppSpacing.xl),
+              // Grade + completeness info
+              if (food != null &&
+                  (food.nutritionGrade != null || food.isIncomplete)) ...[
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    if (food.nutritionGrade != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _gradeColor(
+                            food.nutritionGrade!,
+                          ).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Grade ',
+                              style: AppTextStyles.micro.copyWith(
+                                color: c.textSecondary,
+                              ),
+                            ),
+                            Text(
+                              food.nutritionGrade!.toUpperCase(),
+                              style: AppTextStyles.caption.copyWith(
+                                color: _gradeColor(food.nutritionGrade!),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                    ],
+                    if (food.isIncomplete)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                        ),
+                        child: Text(
+                          '⚠ Incomplete data',
+                          style: AppTextStyles.micro.copyWith(
+                            color: const Color(0xFFB45309),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
 
+              const SizedBox(height: AppSpacing.xl),
               Row(
                 children: [
                   Expanded(
@@ -247,123 +332,85 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
       ),
     );
   }
+
+  Color _gradeColor(String grade) {
+    switch (grade.toUpperCase()) {
+      case 'A':
+        return const Color(0xFF22C55E);
+      case 'B':
+        return const Color(0xFF84CC16);
+      case 'C':
+        return const Color(0xFFF59E0B);
+      case 'D':
+        return const Color(0xFFF97316);
+      case 'E':
+        return const Color(0xFFEF4444);
+      default:
+        return const Color(0xFF9CA3AF);
+    }
+  }
 }
 
 class _ProductBanner extends StatelessWidget {
   final food;
-  const _ProductBanner({required this.food});
+  final C0Colors c;
+  const _ProductBanner({required this.food, required this.c});
 
   @override
-  Widget build(BuildContext context) {
-    final c = C0Theme.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.sm + 2),
-          decoration: BoxDecoration(
-            color: c.success.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-          ),
-          child: Icon(Icons.check_circle_outline, color: c.success, size: 26),
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Container(
+        padding: const EdgeInsets.all(AppSpacing.sm + 2),
+        decoration: BoxDecoration(
+          color: c.success.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                food.displayName,
-                style: AppTextStyles.title.copyWith(color: c.textPrimary),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (food.displayBrand.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(
-                  food.displayBrand,
-                  style: AppTextStyles.caption.copyWith(color: c.textSecondary),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.xs),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: food.isVerified
-                      ? c.success.withOpacity(0.1)
-                      : Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      food.isVerified ? Icons.verified : Icons.info_outline,
-                      size: AppSizes.miniIconSize,
-                      color: food.isVerified ? c.success : Colors.orange,
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      food.isVerified
-                          ? 'Verified nutrition data'
-                          : 'Incomplete data — please verify',
-                      style: AppTextStyles.micro.copyWith(
-                        color: food.isVerified ? c.success : Colors.orange,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _NotFoundBanner extends StatelessWidget {
-  final String barcode;
-  const _NotFoundBanner({required this.barcode});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = C0Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+        child: Icon(Icons.check_circle_outline, color: c.success, size: 26),
+      ),
+      const SizedBox(width: AppSpacing.md),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.sm + 2),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: const Icon(
-                Icons.search_off,
-                color: Colors.orange,
-                size: 26,
-              ),
+            Text(
+              food.displayName,
+              style: AppTextStyles.title.copyWith(color: c.textPrimary),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            if (food.hasBrand)
+              Text(
+                food.displayBrand,
+                style: AppTextStyles.caption.copyWith(color: c.textSecondary),
+              ),
+            const SizedBox(height: AppSpacing.xs),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: (food.isVerified ? c.success : Colors.orange)
+                    .withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Product Not Found',
-                    style: AppTextStyles.title.copyWith(color: c.textPrimary),
+                  Icon(
+                    food.isVerified ? Icons.verified : Icons.info_outline,
+                    size: AppSizes.miniIconSize,
+                    color: food.isVerified ? c.success : Colors.orange,
                   ),
+                  const SizedBox(width: 3),
                   Text(
-                    barcode,
-                    style: AppTextStyles.caption.copyWith(
-                      color: c.textSecondary,
-                      fontFamily: 'monospace',
+                    food.isVerified
+                        ? 'Verified nutrition data'
+                        : 'Incomplete data — please verify',
+                    style: AppTextStyles.micro.copyWith(
+                      color: food.isVerified ? c.success : Colors.orange,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -371,23 +418,68 @@ class _NotFoundBanner extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: c.background,
-            borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+    ],
+  );
+}
+
+class _NotFoundBanner extends StatelessWidget {
+  final String barcode;
+  final C0Colors c;
+  const _NotFoundBanner({required this.barcode, required this.c});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.sm + 2),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: const Icon(Icons.search_off, color: Colors.orange, size: 26),
           ),
-          child: Text(
-            'This product isn\'t in the database yet. '
-            'Enter the nutrition details manually from the product label.',
-            style: AppTextStyles.caption.copyWith(
-              color: c.textSecondary,
-              height: 1.5,
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Product Not Found',
+                  style: AppTextStyles.title.copyWith(color: c.textPrimary),
+                ),
+                Text(
+                  barcode,
+                  style: AppTextStyles.caption.copyWith(
+                    color: c.textSecondary,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
             ),
           ),
+        ],
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: c.background,
+          borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-      ],
-    );
-  }
+        child: Text(
+          'This product isn\'t in OpenFoodFacts yet. '
+          'Enter the nutrition details manually from the product label — '
+          'your entry helps build the global database.',
+          style: AppTextStyles.caption.copyWith(
+            color: c.textSecondary,
+            height: 1.5,
+          ),
+        ),
+      ),
+    ],
+  );
 }

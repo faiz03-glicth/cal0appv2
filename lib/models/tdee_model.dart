@@ -1,123 +1,164 @@
 class TDEEModel {
-  String _gender, _activityLevel, _goal;
-  int _age;
-  double _weight, _height;
+  final String gender;
+  final String activityLevel;
+  final String goal;
+  final int age;
+  final double weight; // kg
+  final double height; // cm
 
   TDEEModel({
-    required String gender,
-    required String activityLevel,
-    required String goal,
-    required int age,
-    required double weight,
-    required double height,
-  }) : _gender = gender,
-       _activityLevel = activityLevel,
-       _goal = goal,
-       _age = age,
-       _weight = weight,
-       _height = height;
+    required this.gender,
+    required this.activityLevel,
+    required this.goal,
+    required this.age,
+    required this.weight,
+    required this.height,
+  });
 
-  // Getters
-  String get gender => _gender;
-  String get activityLevel => _activityLevel;
-  String get goal => _goal;
-  int get age => _age;
-  double get weight => _weight;
-  double get height => _height;
+  // ── BMR (Mifflin-St Jeor) ─────────────────────────────────────────────────
 
-  // Setters
-  set gender(String value) => _gender = value;
-  set activityLevel(String value) => _activityLevel = value;
-  set goal(String value) => _goal = value;
-  set age(int value) => _age = value;
-  set weight(double value) => _weight = value;
-  set height(double value) => _height = value;
-
-  // Step 1 — BMR (Mifflin-St Jeor)
   double calculateBMR() {
-    if (_gender.toLowerCase() == 'male') {
-      return (10 * _weight) + (6.25 * _height) - (5 * _age) + 5;
+    // Clamp inputs to physiologically plausible range
+    final w = weight.clamp(30.0, 300.0);
+    final h = height.clamp(100.0, 250.0);
+    final a = age.clamp(10, 100);
+
+    final base = (10.0 * w) + (6.25 * h) - (5.0 * a);
+    return gender.toLowerCase() == 'male' ? base + 5.0 : base - 161.0;
+  }
+
+  // ── BMR (Harris-Benedict) — for reference / comparison ───────────────────
+
+  double calculateBMRHarrisBenedict() {
+    final w = weight.clamp(30.0, 300.0);
+    final h = height.clamp(100.0, 250.0);
+    final a = age.clamp(10, 100);
+
+    if (gender.toLowerCase() == 'male') {
+      return 88.362 + (13.397 * w) + (4.799 * h) - (5.677 * a);
     } else {
-      return (10 * _weight) + (6.25 * _height) - (5 * _age) - 161;
+      return 447.593 + (9.247 * w) + (3.098 * h) - (4.330 * a);
     }
   }
 
-  // Step 2 — Activity multiplier
+  // ── Activity multiplier ───────────────────────────────────────────────────
+
   double getActivityMultiplier() {
-    switch (_activityLevel.toLowerCase()) {
-      case 'sedentary':
-        return 1.2; // little or no exercise
-      case 'lightly active':
-        return 1.375; // light exercise 1-3 days/week
-      case 'moderately active':
-        return 1.55; // moderate exercise 3-5 days/week
-      case 'very active':
-        return 1.725; // hard exercise 6-7 days/week
-      case 'extra active':
-        return 1.9; // very hard exercise or physical job
-      default:
-        return 1.2;
-    }
+    // Normalise: lower-case, collapse whitespace
+    final level = activityLevel.toLowerCase().trim().replaceAll(
+      RegExp(r'\s+'),
+      ' ',
+    );
+
+    // Accept all reasonable variants from the dropdown + legacy strings
+    if (level.contains('sedentary')) return 1.200;
+    if (level.contains('extra') || level.contains('very very')) return 1.900;
+    if (level.contains('very active') || level == 'very') return 1.725;
+    if (level.contains('moderate') || level == 'moderately active')
+      return 1.550;
+    if (level.contains('light') || level == 'lightly active') return 1.375;
+    if (level.contains('active')) return 1.550; // fallback for bare "active"
+
+    // Default: sedentary
+    return 1.200;
   }
 
-  // Step 3 — TDEE
+  // ── TDEE ──────────────────────────────────────────────────────────────────
+
   double calculateTDEE() {
     return calculateBMR() * getActivityMultiplier();
   }
 
-  // Step 4 — Calorie target based on goal
+  // ── Calorie target with goal adjustment ──────────────────────────────────
+
   double calculateCalorieTarget() {
     double tdee = calculateTDEE();
-    switch (_goal.toLowerCase()) {
-      case 'lose weight':
-        return tdee - 500; // ~0.5kg/week loss
-      case 'lose weight fast':
-        return tdee - 1000; // ~1kg/week loss
-      case 'maintain':
-        return tdee;
-      case 'gain weight':
-        return tdee + 300; // lean bulk
-      case 'gain weight fast':
-        return tdee + 500; // aggressive bulk
-      default:
-        return tdee;
+
+    final g = goal.toLowerCase().trim();
+    double adjusted;
+
+    if (g.contains('lose') && g.contains('fast')) {
+      adjusted = tdee - 1000;
+    } else if (g.contains('lose')) {
+      adjusted = tdee - 500;
+    } else if (g.contains('gain') && g.contains('fast')) {
+      adjusted = tdee + 500;
+    } else if (g.contains('gain')) {
+      adjusted = tdee + 300;
+    } else {
+      adjusted = tdee; // maintain
     }
+
+    // Sanity floor: never recommend below safe minimums
+    final minKcal = gender.toLowerCase() == 'male' ? 1500.0 : 1200.0;
+    return adjusted.clamp(minKcal, 4500.0);
   }
 
-  // Macros breakdown based on calorie target
+  // ── Macro breakdown ───────────────────────────────────────────────────────
+
+  /// Returns protein (g), carbs (g), fat (g) based on goal-appropriate split.
   Map<String, double> calculateMacros() {
-    double calories = calculateCalorieTarget();
+    final cal = calculateCalorieTarget();
+    final g = goal.toLowerCase();
+
+    // Protein-forward splits for body composition goals
+    double proteinPct, carbPct, fatPct;
+
+    if (g.contains('lose')) {
+      // Higher protein preserves muscle during deficit
+      proteinPct = 0.35;
+      fatPct = 0.30;
+      carbPct = 0.35;
+    } else if (g.contains('gain')) {
+      // Slight carb emphasis for muscle glycogen
+      proteinPct = 0.30;
+      fatPct = 0.25;
+      carbPct = 0.45;
+    } else {
+      // Maintenance: balanced
+      proteinPct = 0.30;
+      fatPct = 0.25;
+      carbPct = 0.45;
+    }
+
     return {
-      'protein': (calories * 0.30) / 4, // 30% of calories, 4 cal/g
-      'carbs': (calories * 0.45) / 4, // 45% of calories, 4 cal/g
-      'fats': (calories * 0.25) / 9, // 25% of calories, 9 cal/g
+      'protein': (cal * proteinPct) / 4.0, // 4 kcal/g
+      'carbs': (cal * carbPct) / 4.0,
+      'fat': (cal * fatPct) / 9.0, // 9 kcal/g
     };
   }
 
-  // Full summary
+  // ── Convenience int getter ────────────────────────────────────────────────
+
+  int get calorieTargetInt => calculateCalorieTarget().round();
+  int get bmrInt => calculateBMR().round();
+  int get tdeeInt => calculateTDEE().round();
+
+  // ── Debug summary ─────────────────────────────────────────────────────────
+
   String getSummary() {
-    double bmr = calculateBMR();
-    double tdee = calculateTDEE();
-    double target = calculateCalorieTarget();
-    Map<String, double> macros = calculateMacros();
+    final bmr = calculateBMR();
+    final tdee = calculateTDEE();
+    final target = calculateCalorieTarget();
+    final macros = calculateMacros();
 
     return '''
-=== TDEE Summary ===
-Gender        : $_gender
-Age           : $_age years
-Weight        : $_weight kg
-Height        : $_height cm
-Activity Level: $_activityLevel
-Goal          : $_goal
+=== TDEE Summary (Mifflin-St Jeor) ===
+Gender         : $gender
+Age            : $age years
+Weight         : $weight kg
+Height         : $height cm
+Activity Level : $activityLevel  (×${getActivityMultiplier().toStringAsFixed(3)})
+Goal           : $goal
 
-BMR           : ${bmr.toStringAsFixed(0)} kcal/day
-TDEE          : ${tdee.toStringAsFixed(0)} kcal/day
-Calorie Target: ${target.toStringAsFixed(0)} kcal/day
+BMR            : ${bmr.toStringAsFixed(0)} kcal/day
+TDEE           : ${tdee.toStringAsFixed(0)} kcal/day
+Calorie Target : ${target.toStringAsFixed(0)} kcal/day
 
 === Macros ===
 Protein : ${macros['protein']!.toStringAsFixed(1)} g/day
 Carbs   : ${macros['carbs']!.toStringAsFixed(1)} g/day
-Fats    : ${macros['fats']!.toStringAsFixed(1)} g/day
+Fat     : ${macros['fat']!.toStringAsFixed(1)} g/day
     ''';
   }
 }

@@ -13,6 +13,7 @@ import 'package:cal0appv2/views/widgets/app_primary_button.dart';
 import 'package:cal0appv2/views/widgets/app_message_banner.dart';
 import 'package:cal0appv2/views/widgets/app_section_title.dart';
 import 'package:cal0appv2/views/widgets/app_card.dart';
+import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 
 class UserProfileView extends StatefulWidget {
   const UserProfileView({super.key});
@@ -330,6 +331,81 @@ class _UserProfileViewState extends State<UserProfileView> {
                       label: 'Save Profile',
                       isLoading: vm.isLoading,
                       onPressed: () => _save(vm),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // ── Sign Out ───────────────────────────────────────
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(
+                            color: Color(0xFFD67A7A),
+                            width: 1.5,
+                          ),
+                          foregroundColor: const Color(0xFFD67A7A),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: AppSpacing.md,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                          ),
+                        ),
+                        icon: const Icon(Icons.logout, size: 18),
+                        label: const Text(
+                          'Sign Out',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                        ),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              backgroundColor: c.card,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.xl,
+                                ),
+                              ),
+                              title: Text(
+                                'Sign Out',
+                                style: TextStyle(
+                                  color: c.textPrimary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              content: Text(
+                                'Are you sure you want to sign out?',
+                                style: TextStyle(color: c.textSecondary),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: Text(
+                                    'Cancel',
+                                    style: TextStyle(color: c.textSecondary),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    context.read<AuthViewModel>().signOut();
+                                  },
+                                  child: const Text(
+                                    'Sign Out',
+                                    style: TextStyle(
+                                      color: Color(0xFFD67A7A),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.xxxl),
                   ],

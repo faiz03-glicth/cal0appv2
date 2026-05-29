@@ -46,10 +46,10 @@ dependencies:
   intl: ^0.19.0
   google_mlkit_text_recognition: ^0.13.1
   image_picker: ^1.1.2
-  tflite_flutter: ^0.11.0
   mobile_scanner: ^6.0.0
   openfoodfacts: ^3.30.2
-  
+  flutter_onnxruntime: ^1.5.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

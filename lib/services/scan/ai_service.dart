@@ -1,105 +1,165 @@
 import 'dart:math';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 import 'package:cal0appv2/services/logs/debuglog_services.dart';
 
 class AminoSpikingAI {
-  Interpreter? _interpreter;
+  OrtSession? _session;
   final Map<String, int> _vocab = {};
   final int maxLength = 128;
 
-  // ── Special token IDs (standard BERT/DistilBERT) ──────────────────────────
   static const int _clsId = 101;
   static const int _sepId = 102;
   static const int _padId = 0;
   static const int _unkId = 100;
 
-  // ── Public state ──────────────────────────────────────────────────────────
-  bool get isReady => _interpreter != null && _vocab.isNotEmpty;
+  static const List<String> _labels = ['Authentic', 'Spiked', 'Plant-Based'];
 
-  // ── Initialization ────────────────────────────────────────────────────────
+  bool get isReady => _session != null && _vocab.isNotEmpty;
 
   Future<void> initialize() async {
     try {
-      // 1. Load TFLite model from assets
-      _interpreter = await Interpreter.fromAsset(
-        'assets/ml/distilbert_model.tflite',
-      );
+      final ort = OnnxRuntime();
+      _session = await ort.createSessionFromAsset('assets/ml/model.onnx');
       LogService.info(
-        'AI: model loaded — '
-        'inputs=${_interpreter!.getInputTensors().length} '
-        'outputs=${_interpreter!.getOutputTensors().length}',
+        'AI: ONNX model loaded ✅ '
+        'inputs=${_session!.inputNames} '
+        'outputs=${_session!.outputNames}',
       );
 
-      // 2. Load vocab.txt — one token per line, line index = token ID
+      // Load vocab
       final raw = await rootBundle.loadString('assets/ml/vocab.txt');
       final lines = raw.split('\n');
       for (int i = 0; i < lines.length; i++) {
         final token = lines[i].trim();
         if (token.isNotEmpty) _vocab[token] = i;
       }
-
       LogService.info('AI: vocab loaded — ${_vocab.length} tokens ✅');
     } catch (e) {
       LogService.error('AI: initialization failed', e);
     }
   }
 
-  // ── Inference ─────────────────────────────────────────────────────────────
-
   /// Returns a Map with keys:
   ///   'isSpiked'   → bool
   ///   'confidence' → double (0.0 – 1.0)
+  ///   'label'      → String ('Authentic' | 'Spiked' | 'Plant-Based')
+  ///   'labelIndex' → int (0 | 1 | 2)
   Future<Map<String, dynamic>> analyzeIngredients(String ingredientText) async {
     if (!isReady) {
       LogService.error('AI: not ready, skipping inference');
-      return {'isSpiked': false, 'confidence': 0.0};
+      return {
+        'isSpiked': false,
+        'confidence': 0.0,
+        'label': 'Unknown',
+        'labelIndex': 0,
+      };
     }
 
     try {
-      // Tokenize → inputIds + attentionMask, both length 128
       final tokens = _tokenize(ingredientText);
       final inputIds = tokens[0];
       final attentionMask = tokens[1];
 
-      // TFLite expects shape [1, 128]
-      final inputIdsTensor = [inputIds];
-      final attentionMaskTensor = [attentionMask];
-
-      // Output shape [1, 2] — logits for [label_0_clean, label_1_spiked]
-      final output = [List<double>.filled(2, 0.0)];
-
-      // Two inputs: must use runForMultipleInputs
-      _interpreter!.runForMultipleInputs(
-        [inputIdsTensor, attentionMaskTensor],
-        {0: output},
+      // Build input tensors — shape [1, 128] as int64
+      final inputIdsTensor = await OrtValue.fromList(
+        inputIds.map((e) => e.toInt()).toList(),
+        [1, maxLength],
+      );
+      final attentionMaskTensor = await OrtValue.fromList(
+        attentionMask.map((e) => e.toInt()).toList(),
+        [1, maxLength],
       );
 
-      final logits = output[0];
+      final inputs = {
+        'input_ids': inputIdsTensor,
+        'attention_mask': attentionMaskTensor,
+      };
+
+      final outputs = await _session!.run(inputs);
+
+      // Dispose input tensors
+      inputIdsTensor.dispose();
+      attentionMaskTensor.dispose();
+
+      // Extract logits — output shape [1, 3]
+      final logitsTensor = outputs['logits'];
+      if (logitsTensor == null) {
+        LogService.error('AI: no logits output');
+        _disposeOutputs(outputs);
+        return {
+          'isSpiked': false,
+          'confidence': 0.0,
+          'label': 'Unknown',
+          'labelIndex': 0,
+        };
+      }
+
+      final rawList = await logitsTensor.asList();
+      _disposeOutputs(outputs);
+
+      if (rawList == null || rawList.isEmpty) {
+        LogService.error('AI: empty logits');
+        return {
+          'isSpiked': false,
+          'confidence': 0.0,
+          'label': 'Unknown',
+          'labelIndex': 0,
+        };
+      }
+
+      // rawList is flat [v0, v1, v2] since batch=1
+      final List<double> logits = (rawList as List)
+          .map((e) => (e as num).toDouble())
+          .toList();
+
       final probs = _softmax(logits);
 
-      final isSpiked = probs[1] > probs[0];
-      final confidence = probs[isSpiked ? 1 : 0];
+      // Find best class
+      int bestLabel = 0;
+      double bestProb = probs[0];
+      for (int i = 1; i < probs.length; i++) {
+        if (probs[i] > bestProb) {
+          bestProb = probs[i];
+          bestLabel = i;
+        }
+      }
+
+      final isSpiked = bestLabel == 1;
+      final label = _labels[bestLabel];
 
       LogService.info(
         'AI result → '
-        'clean=${probs[0].toStringAsFixed(3)} '
+        'authentic=${probs[0].toStringAsFixed(3)} '
         'spiked=${probs[1].toStringAsFixed(3)} '
-        'verdict=${isSpiked ? "SPIKED" : "CLEAN"}',
+        'plant=${probs[2].toStringAsFixed(3)} '
+        'verdict=$label (${(bestProb * 100).toStringAsFixed(1)}%)',
       );
 
-      return {'isSpiked': isSpiked, 'confidence': confidence};
+      return {
+        'isSpiked': isSpiked,
+        'confidence': bestProb,
+        'label': label,
+        'labelIndex': bestLabel,
+      };
     } catch (e) {
       LogService.error('AI: inference error', e);
-      return {'isSpiked': false, 'confidence': 0.0};
+      return {
+        'isSpiked': false,
+        'confidence': 0.0,
+        'label': 'Unknown',
+        'labelIndex': 0,
+      };
     }
   }
 
-  // ── Tokenization ──────────────────────────────────────────────────────────
+  void _disposeOutputs(Map<String, OrtValue?> outputs) {
+    for (final v in outputs.values) {
+      v?.dispose();
+    }
+  }
 
-  /// Returns [inputIds, attentionMask], both padded to maxLength.
   List<List<int>> _tokenize(String text) {
-    // Clean text — mirrors training preprocessing in your Colab notebook
     final clean = text
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9\s,.\-%()/]'), ' ')
@@ -107,7 +167,7 @@ class AminoSpikingAI {
         .trim();
 
     final words = clean.split(' ');
-    final tokenIds = <int>[_clsId]; // start with [CLS]
+    final tokenIds = <int>[_clsId];
 
     for (final word in words) {
       if (word.isEmpty) continue;
@@ -118,26 +178,22 @@ class AminoSpikingAI {
         tokenIds.add(id);
       }
     }
-    tokenIds.add(_sepId); // end with [SEP]
+    tokenIds.add(_sepId);
 
-    // Build padded tensors
     final inputIds = List<int>.filled(maxLength, _padId);
     final attentionMask = List<int>.filled(maxLength, 0);
 
     for (int i = 0; i < tokenIds.length && i < maxLength; i++) {
       inputIds[i] = tokenIds[i];
-      attentionMask[i] = 1; // 1 = real token, 0 = padding
+      attentionMask[i] = 1;
     }
 
     return [inputIds, attentionMask];
   }
 
-  /// WordPiece tokenization — matches HuggingFace DistilBERT tokenizer.
   List<int> _wordPieceTokenize(String word) {
-    // Try the whole word first
     if (_vocab.containsKey(word)) return [_vocab[word]!];
 
-    // Greedy longest-match subword split
     final result = <int>[];
     int start = 0;
 
@@ -156,19 +212,13 @@ class AminoSpikingAI {
         end--;
       }
 
-      if (foundId == null) {
-        // Whole word is unknown — return [UNK]
-        return [_unkId];
-      }
-
+      if (foundId == null) return [_unkId];
       result.add(foundId);
       start = end;
     }
 
     return result;
   }
-
-  // ── Softmax ───────────────────────────────────────────────────────────────
 
   List<double> _softmax(List<double> logits) {
     final maxVal = logits.reduce(max);
@@ -177,10 +227,8 @@ class AminoSpikingAI {
     return exps.map((e) => e / sum).toList();
   }
 
-  // ── Cleanup ───────────────────────────────────────────────────────────────
-
-  void dispose() {
-    _interpreter?.close();
+  Future<void> dispose() async {
+    await _session?.close();
     _vocab.clear();
     LogService.info('AI: disposed');
   }

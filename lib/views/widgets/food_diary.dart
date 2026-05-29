@@ -58,7 +58,11 @@ class FoodDiary extends StatelessWidget {
                     ),
                   ),
                 ),
-                icon: Icon(Icons.history, size: AppSizes.miniIconSize, color: c.primary),
+                icon: Icon(
+                  Icons.history,
+                  size: AppSizes.miniIconSize,
+                  color: c.primary,
+                ),
                 label: Text(
                   'History',
                   style: AppTextStyles.caption.copyWith(color: c.primary),
@@ -78,7 +82,10 @@ class FoodDiary extends StatelessWidget {
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.xl),
-                child: CircularProgressIndicator(color: c.primary, strokeWidth: 2),
+                child: CircularProgressIndicator(
+                  color: c.primary,
+                  strokeWidth: 2,
+                ),
               ),
             )
           else if (vm.foodLogs.isEmpty)
@@ -174,7 +181,11 @@ class _DiaryItem extends StatelessWidget {
 
           // Edit / Delete menu
           PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: c.textSecondary, size: AppSizes.smallIconSize),
+            icon: Icon(
+              Icons.more_vert,
+              color: c.textSecondary,
+              size: AppSizes.smallIconSize,
+            ),
             color: c.card,
             onSelected: (val) {
               if (val == 'edit') {
@@ -189,7 +200,11 @@ class _DiaryItem extends StatelessWidget {
                 value: 'edit',
                 child: Row(
                   children: [
-                    Icon(Icons.edit, size: AppSizes.miniIconSize + 2, color: c.primary),
+                    Icon(
+                      Icons.edit,
+                      size: AppSizes.miniIconSize + 2,
+                      color: c.primary,
+                    ),
                     const SizedBox(width: AppSpacing.sm),
                     Text('Edit', style: TextStyle(color: c.textPrimary)),
                   ],
@@ -199,7 +214,11 @@ class _DiaryItem extends StatelessWidget {
                 value: 'delete',
                 child: Row(
                   children: [
-                    Icon(Icons.delete, size: AppSizes.miniIconSize + 2, color: c.warning),
+                    Icon(
+                      Icons.delete,
+                      size: AppSizes.miniIconSize + 2,
+                      color: c.warning,
+                    ),
                     const SizedBox(width: AppSpacing.sm),
                     Text('Delete', style: TextStyle(color: c.warning)),
                   ],
@@ -213,19 +232,26 @@ class _DiaryItem extends StatelessWidget {
   }
 
   void _openEditSheet(BuildContext context, FoodLogModel log) {
+    final foodLogVm = Provider.of<FoodLogViewModel>(
+      context,
+      listen: false,
+    ); // capture BEFORE showModal
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => ChangeNotifierProvider.value(
-        value: Provider.of<FoodLogViewModel>(context, listen: false),
+        value: foodLogVm, // use captured reference
         child: FoodSheet(isEdit: true, existing: log),
       ),
     );
   }
 
   void _confirmDelete(
-    BuildContext context, FoodLogModel log, FoodLogViewModel vm, C0Colors c,
+    BuildContext context,
+    FoodLogModel log,
+    FoodLogViewModel vm,
+    C0Colors c,
   ) {
     final uid = context.read<AuthViewModel>().currentUid ?? '';
     showDialog(
@@ -247,7 +273,10 @@ class _DiaryItem extends StatelessWidget {
               Navigator.pop(context);
               vm.deleteFoodLog(uid: uid, foodLogID: log.foodLogID);
             },
-            child: Text('Delete', style: TextStyle(color: c.warning, fontWeight: FontWeight.bold)),
+            child: Text(
+              'Delete',
+              style: TextStyle(color: c.warning, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -273,12 +302,19 @@ class _EmptyState extends StatelessWidget {
       child: Center(
         child: Column(
           children: [
-            Icon(isToday ? Icons.no_food : Icons.history, size: 40, color: c.textSecondary),
+            Icon(
+              isToday ? Icons.no_food : Icons.history,
+              size: 40,
+              color: c.textSecondary,
+            ),
             const SizedBox(height: AppSpacing.sm),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: AppTextStyles.caption.copyWith(color: c.textSecondary, height: 1.5),
+              style: AppTextStyles.caption.copyWith(
+                color: c.textSecondary,
+                height: 1.5,
+              ),
             ),
           ],
         ),

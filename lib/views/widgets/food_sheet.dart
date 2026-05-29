@@ -31,16 +31,12 @@ class _FoodSheetState extends State<FoodSheet> {
   late final TextEditingController _carbsCtrl;
   late final TextEditingController _fatCtrl;
   late final TextEditingController _servingCtrl;
-  final _searchFocus = FocusNode();
-
-  // ✅ Saved VM reference — NEVER use context in dispose()
   late FoodLogViewModel _foodLogVm;
 
   @override
   void initState() {
     super.initState();
 
-    // ✅ Capture VM reference immediately — safe in initState
     _foodLogVm = context.read<FoodLogViewModel>();
 
     _searchCtrl = TextEditingController();
@@ -59,24 +55,13 @@ class _FoodSheetState extends State<FoodSheet> {
       text: _foodLogVm.servingGrams.toStringAsFixed(0),
     );
 
-    // ✅ mounted guard inside listener — prevents setState after dispose
-    _searchFocus.addListener(_onFocusChange);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _foodLogVm.loadRecentFoods();
     });
   }
 
-  void _onFocusChange() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
   @override
   void dispose() {
-    _searchFocus.removeListener(_onFocusChange);
-
     _foodLogVm.cancelSearch();
 
     _searchCtrl.dispose();
@@ -86,11 +71,9 @@ class _FoodSheetState extends State<FoodSheet> {
     _carbsCtrl.dispose();
     _fatCtrl.dispose();
     _servingCtrl.dispose();
-    _searchFocus.dispose();
     super.dispose();
   }
 
-  // ✅ Uses saved _foodLogVm — never touches context
   void _syncFormFromVM() {
     if (!mounted) return;
     _nameCtrl.text = _foodLogVm.foodName;
@@ -112,8 +95,12 @@ class _FoodSheetState extends State<FoodSheet> {
     final uid = context.read<AuthViewModel>().currentUid ?? '';
     if (uid.isEmpty) return;
 
+    HealthWarningViewModel? healthVm;
     try {
-      final healthVm = context.read<HealthWarningViewModel>();
+      healthVm = context.read<HealthWarningViewModel>();
+    } catch (_) {}
+
+    if (healthVm != null) {
       final warnings = healthVm.analyzeValues(
         foodName: vm.foodName,
         calories: int.tryParse(vm.calories) ?? 0,
@@ -123,11 +110,13 @@ class _FoodSheetState extends State<FoodSheet> {
         sugar: vm.sugar,
         sodium: vm.sodium,
       );
-      if (warnings.isNotEmpty && context.mounted) {
+      if (warnings.isNotEmpty) {
+        if (!mounted) return;
         final proceed = await showHealthWarningDialog(context, warnings);
-        if (!proceed || !context.mounted) return;
+        if (!mounted) return;
+        if (!proceed) return;
       }
-    } catch (_) {}
+    }
 
     if (!mounted) return;
 
@@ -137,7 +126,8 @@ class _FoodSheetState extends State<FoodSheet> {
     } else {
       ok = await vm.addFoodLog(uid: uid);
     }
-    if (ok && mounted && context.mounted) Navigator.pop(context);
+
+    if (ok && mounted) Navigator.pop(context);
   }
 
   @override
@@ -180,7 +170,6 @@ class _FoodSheetState extends State<FoodSheet> {
           _SearchSection(
             vm: vm,
             searchCtrl: _searchCtrl,
-            searchFocus: _searchFocus,
             onSelect: (food) {
               vm.selectOFFFood(food);
               _syncFormFromVM();
@@ -316,13 +305,11 @@ class _RecentChip extends StatelessWidget {
 class _SearchSection extends StatelessWidget {
   final FoodLogViewModel vm;
   final TextEditingController searchCtrl;
-  final FocusNode searchFocus;
   final void Function(OFFFoodResult) onSelect;
 
   const _SearchSection({
     required this.vm,
     required this.searchCtrl,
-    required this.searchFocus,
     required this.onSelect,
   });
 
@@ -335,7 +322,6 @@ class _SearchSection extends StatelessWidget {
         // Search input
         TextField(
           controller: searchCtrl,
-          focusNode: searchFocus,
           onChanged: vm.searchFood,
           style: AppTextStyles.fieldText.copyWith(color: c.textPrimary),
           decoration: InputDecoration(
@@ -388,7 +374,7 @@ class _SearchSection extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Text(
-                  'Searching OpenFoodFacts…',
+                  'Searching....',
                   style: AppTextStyles.caption.copyWith(color: c.textSecondary),
                 ),
               ],
@@ -475,6 +461,7 @@ class _FoodResultCard extends StatelessWidget {
           border: Border.all(color: c.divider),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // Product image or placeholder icon
             ClipRRect(
@@ -482,21 +469,22 @@ class _FoodResultCard extends StatelessWidget {
               child: food.imageUrl != null
                   ? Image.network(
                       food.imageUrl!,
-                      width: 48,
-                      height: 48,
+                      width: 44,
+                      height: 44,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => _FoodIcon(c: c),
                     )
                   : _FoodIcon(c: c),
             ),
-            const SizedBox(width: AppSpacing.md),
-
-            // Info column
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Name + grade badge row
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Text(
@@ -505,15 +493,19 @@ class _FoodResultCard extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             color: c.textPrimary,
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (food.nutritionGrade != null)
+                      if (food.nutritionGrade != null) ...[
+                        const SizedBox(width: 4),
                         _GradeBadge(grade: food.nutritionGrade!),
+                      ],
                     ],
                   ),
-                  if (food.hasBrand)
+                  // Brand
+                  if (food.hasBrand) ...[
+                    const SizedBox(height: 2),
                     Text(
                       food.displayBrand,
                       style: AppTextStyles.tiny.copyWith(
@@ -522,39 +514,37 @@ class _FoodResultCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  const SizedBox(height: AppSpacing.xs + 2),
-                  Row(
+                  ],
+                  const SizedBox(height: AppSpacing.xs),
+                  // Macro chips — Wrap prevents overflow
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
                     children: [
                       _MacroChip(
                         '${food.caloriesForServing(food.servingSize)} kcal',
                         c.primary,
                       ),
-                      const SizedBox(width: 4),
                       _MacroChip(
                         'P ${food.proteinPer100.toStringAsFixed(0)}g',
                         const Color(0xFF3B82F6),
                       ),
-                      const SizedBox(width: 4),
                       _MacroChip(
                         'C ${food.carbsPer100.toStringAsFixed(0)}g',
                         const Color(0xFFF59E0B),
                       ),
-                      const SizedBox(width: 4),
                       _MacroChip(
                         'F ${food.fatPer100.toStringAsFixed(0)}g',
                         const Color(0xFF6B7280),
                       ),
-                      if (food.isIncomplete) ...[
-                        const SizedBox(width: 4),
-                        _IncompleteBadge(),
-                      ],
+                      if (food.isIncomplete) _IncompleteBadge(),
                     ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
-            Icon(Icons.add_circle_outline, color: c.primary, size: 22),
+            const SizedBox(width: AppSpacing.xs),
+            Icon(Icons.add_circle_outline, color: c.primary, size: 20),
           ],
         ),
       ),
@@ -709,31 +699,15 @@ class _ManualForm extends StatelessWidget {
           _SelectedFoodBanner(food: selectedFood!, c: c),
         if (selectedFood != null) const SizedBox(height: AppSpacing.md),
 
-        // Serving size slider (only when OFF food is selected)
         if (selectedFood != null && selectedFood!.hasNutrition) ...[
-          Text(
-            'Serving Size',
-            style: AppTextStyles.fieldLabel.copyWith(color: c.textPrimary),
-          ),
-          const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               Expanded(
-                child: Slider(
-                  value: vm.servingGrams.clamp(5, 500),
-                  min: 5,
-                  max: 500,
-                  divisions: 99,
-                  activeColor: c.primary,
-                  inactiveColor: c.track,
-                  onChanged: onServingChanged,
-                ),
-              ),
-              SizedBox(
-                width: 70,
                 child: AppTextField(
                   controller: servingCtrl,
-                  hint: 'g',
+                  label: 'Serving Size',
+                  hint: 'e.g. 100',
+                  icon: Icons.straighten,
                   isNumber: true,
                   onChanged: (v) {
                     final g = double.tryParse(v);
@@ -741,9 +715,45 @@ class _ManualForm extends StatelessWidget {
                   },
                 ),
               ),
+              const SizedBox(width: AppSpacing.sm),
+              // Unit label box
+              Padding(
+                padding: const EdgeInsets.only(top: 22), // align with field
+                child: Container(
+                  height: 52,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.primary.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: c.primary.withOpacity(0.3)),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    selectedFood!.servingUnit.isNotEmpty
+                        ? selectedFood!.servingUnit
+                        : 'g',
+                    style: AppTextStyles.bodyCompact.copyWith(
+                      color: c.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
+            child: Text(
+              'Default serving: ${selectedFood!.servingSize.toStringAsFixed(0)} ${selectedFood!.servingUnit.isNotEmpty ? selectedFood!.servingUnit : 'g'} — nutrition values scale automatically',
+              style: AppTextStyles.micro.copyWith(
+                color: c.textSecondary,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
         ],
 
         // Core fields

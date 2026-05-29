@@ -52,12 +52,17 @@ class _HomepageState extends State<Homepage> {
       highlightColor: Colors.transparent,
       child: SizedBox(
         width: 65,
+        height: 56, // ADD fixed height
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min, // ADD this
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: isSelected ? c.primary : c.slate, size: 24),
-            const SizedBox(height: 4),
+            Icon(
+              icon,
+              color: isSelected ? c.primary : c.slate,
+              size: 22,
+            ), // reduce from 24
+            const SizedBox(height: 2), // reduce from 4
             Text(
               label,
               style: TextStyle(
@@ -93,6 +98,7 @@ class _HomepageState extends State<Homepage> {
         notchMargin: 8.0,
         elevation: 8,
         padding: EdgeInsets.zero,
+        height: 60, // ADD explicit height
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -101,14 +107,13 @@ class _HomepageState extends State<Homepage> {
                 _buildNavItem(icon: Icons.home, label: 'Home', index: 0, c: c),
                 const SizedBox(width: 8),
                 _buildNavItem(
-                  icon: Icons.dashboard,
-                  label: 'Dashboard',
+                  icon: Icons.menu_book_rounded,
+                  label: 'Diary',
                   index: 1,
                   c: c,
                 ),
               ],
             ),
-            // Center space for FAB notch
             const SizedBox(width: 80),
             Row(
               children: [
@@ -179,13 +184,15 @@ class _AddFoodModal extends StatelessWidget {
                 iconBg: const Color(0xFFEBF3FF),
                 iconColor: const Color(0xFF185FA5),
                 onTap: () {
+                  final foodLogVm = context
+                      .read<FoodLogViewModel>(); // capture BEFORE pop
                   Navigator.pop(context);
                   showModalBottomSheet(
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
                     builder: (_) => ChangeNotifierProvider.value(
-                      value: context.read<FoodLogViewModel>(),
+                      value: foodLogVm, // use captured reference, not context
                       child: const FoodSheet(isEdit: false),
                     ),
                   );
@@ -247,14 +254,14 @@ class _AddFoodModal extends StatelessWidget {
                 iconBg: const Color(0xFFEEEDFE),
                 iconColor: const Color(0xFF534AB7),
                 onTap: () {
+                  final foodLogVm = context.read<FoodLogViewModel>();
                   Navigator.pop(context);
-                  // Navigate to supplement/whey logging — reuse FoodSheet
                   showModalBottomSheet(
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
                     builder: (_) => ChangeNotifierProvider.value(
-                      value: context.read<FoodLogViewModel>(),
+                      value: foodLogVm,
                       child: const FoodSheet(isEdit: false),
                     ),
                   );

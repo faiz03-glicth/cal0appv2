@@ -108,9 +108,13 @@ class OFFService {
         },
       );
 
+      LogService.info('OFFService: URL = $uri');
+
       final response = await http
-          .get(uri, headers: {'User-Agent': 'C0App/1.0'})
-          .timeout(const Duration(seconds: 14));
+          .get(uri, headers: {'User-Agent': 'C0App/1.0 (cal0appv2)'})
+          .timeout(const Duration(seconds: 20)); // increased timeout
+
+      LogService.info('OFFService: HTTP ${response.statusCode}');
 
       if (response.statusCode != 200) {
         LogService.error('OFFService.searchFood: HTTP ${response.statusCode}');
@@ -118,15 +122,21 @@ class OFFService {
       }
 
       final body = json.decode(response.body) as Map<String, dynamic>;
-      final hits = body['hits'] as List<dynamic>? ?? [];
+
+      // The search API returns 'hits' for the search endpoint
+      final hits =
+          body['hits'] as List<dynamic>? ??
+          body['products'] as List<dynamic>? ?? // fallback
+          [];
+
+      LogService.info('OFFService: raw hits count = ${hits.length}');
 
       final results = hits
           .whereType<Map<String, dynamic>>()
           .map(_mapSearchHit)
-          .where((r) => r.name.isNotEmpty)
-          .toList();
+          .toList(); // remove the name filter temporarily
 
-      LogService.info('OFFService: search returned ${results.length} results');
+      LogService.info('OFFService: mapped results = ${results.length}');
       return results;
     } catch (e) {
       LogService.error('OFFService.searchFood', e);
@@ -176,11 +186,14 @@ class OFFService {
   OFFFoodResult _mapSearchHit(Map<String, dynamic> hit) {
     final n = hit['nutriments'] as Map<String, dynamic>? ?? {};
 
+    // More robust name extraction
     final name = (hit['product_name_en'] as String?)?.trim().isNotEmpty == true
-        ? hit['product_name_en'] as String
+        ? (hit['product_name_en'] as String).trim()
         : (hit['product_name_ms'] as String?)?.trim().isNotEmpty == true
-        ? hit['product_name_ms'] as String
-        : (hit['product_name'] as String?)?.trim() ?? '';
+        ? (hit['product_name_ms'] as String).trim()
+        : (hit['product_name'] as String?)?.trim().isNotEmpty == true
+        ? (hit['product_name'] as String).trim()
+        : 'Unknown Product';
 
     double nv(String key) => (n[key] as num?)?.toDouble() ?? 0.0;
 
@@ -200,7 +213,7 @@ class OFFService {
     return OFFFoodResult(
       barcode: (hit['code'] as String?)?.trim() ?? '',
       name: name,
-      brand: (hit['brands'] as String?)?.trim() ?? '',
+      brand: _safeString(hit['brands']) ?? '',
       imageUrl: hit['image_front_url'] as String?,
       nutritionGrade: hit['nutriscore_grade'] as String?,
       servingSize: servingQty > 0 ? servingQty : 100,
@@ -220,8 +233,8 @@ class OFFService {
       calciumPer100: nv('calcium_100g') * 1000,
       ironPer100: nv('iron_100g') * 1000,
       ingredientsText:
-          (hit['ingredients_text_en'] as String?) ??
-          hit['ingredients_text'] as String?,
+          _safeString(hit['ingredients_text_en']) ??
+          _safeString(hit['ingredients_text']),
       isVerified: n.isNotEmpty,
       completeness: (completeness / 100).clamp(0.0, 1.0),
       cachedAt: DateTime.now(),
@@ -230,6 +243,13 @@ class OFFService {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
+  String? _safeString(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value.trim().isEmpty ? null : value.trim();
+    if (value is List)
+      return value.join(', ').trim().isEmpty ? null : value.join(', ').trim();
+    return value.toString().trim();
+  }
 
   String _productName(Product p) {
     final en = p.productNameInLanguages?[OpenFoodFactsLanguage.ENGLISH]?.trim();

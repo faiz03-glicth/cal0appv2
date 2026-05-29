@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:cal0appv2/viewModels/usermodel/user_viewmodel.dart';
 import 'package:cal0appv2/viewModels/foodlog/food_history_viewmodel.dart';
@@ -9,6 +8,9 @@ import 'package:cal0appv2/views/widgets/c0_app_bar.dart';
 import 'package:cal0appv2/views/widgets/recent_scan_carousel.dart';
 import 'package:cal0appv2/views/widgets/app_card.dart';
 import 'package:cal0appv2/views/debug/debug_view.dart';
+import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
+import 'package:cal0appv2/viewModels/dashboard/dashboard_viewmodel.dart';
+import 'package:cal0appv2/views/users/userprofile_view.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -26,7 +28,12 @@ class _HomeTabState extends State<HomeTab> with AutomaticKeepAliveClientMixin {
     Future.microtask(() {
       if (!mounted) return;
       final uid = context.read<AuthViewModel>().currentUid ?? '';
-      if (uid.isNotEmpty) context.read<FoodHistoryViewModel>().load(uid);
+      if (uid.isNotEmpty) {
+        context.read<FoodHistoryViewModel>().load(uid);
+        // ADD these two lines:
+        context.read<DashboardViewModel>().loadDashboard(uid);
+        context.read<FoodLogViewModel>().loadFoodLogs(uid: uid);
+      }
     });
   }
 
@@ -50,21 +57,39 @@ class _HomeTabState extends State<HomeTab> with AutomaticKeepAliveClientMixin {
       backgroundColor: c.background,
       appBar: C0AppBar(
         title: 'C0 App',
-        // Dark mode toggle removed — now in UserProfileView > App Settings
         actions: [
           if (kDebugBuild)
             IconButton(
-              icon: Icon(Icons.bug_report_outlined, color: c.textSecondary),
+              icon: const Icon(
+                Icons.bug_report_outlined,
+                color: Colors.white70,
+              ),
               tooltip: 'Debug',
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const DebugView()),
               ),
             ),
-          IconButton(
-            icon: Icon(Icons.logout_outlined, color: c.textSecondary),
-            tooltip: 'Sign out',
-            onPressed: () => context.read<AuthViewModel>().signOut(),
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.md),
+            child: GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const UserProfileView()),
+              ),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.white.withOpacity(0.25),
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -114,8 +139,9 @@ class _HomeTabState extends State<HomeTab> with AutomaticKeepAliveClientMixin {
                         fontSize: 30,
                       ),
                     ),
+
                     const SizedBox(height: AppSpacing.lg),
-                    Row(
+                    Wrap(
                       children: [
                         _HeroStat(
                           Icons.qr_code_scanner,
@@ -133,7 +159,7 @@ class _HomeTabState extends State<HomeTab> with AutomaticKeepAliveClientMixin {
                   ],
                 ),
               ),
-
+              const _SimpleCalorieRing(),
               const SizedBox(height: AppSpacing.lg),
 
               // ── Recent scan carousel ───────────────────────────────
@@ -283,13 +309,16 @@ class _HeroStat extends StatelessWidget {
   final String value;
   final String label;
   const _HeroStat(this.icon, this.value, this.label);
+
   @override
   Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min, // ADD this
     children: [
       Icon(icon, color: Colors.white70, size: 14),
       const SizedBox(width: AppSpacing.xs),
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min, // ADD this
         children: [
           Text(
             value,
@@ -350,3 +379,198 @@ class _FeatureCard extends StatelessWidget {
 
 // Build-mode check
 const bool kDebugBuild = !bool.fromEnvironment('dart.vm.product');
+
+class _SimpleCalorieRing extends StatelessWidget {
+  const _SimpleCalorieRing();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    final foodVm = context.watch<FoodLogViewModel>();
+    final dashVm = context.watch<DashboardViewModel>();
+    final consumed = foodVm.totalCalories;
+    final target = dashVm.calorieTarget;
+    final remaining = (target - consumed).clamp(0, target);
+    final progress = target > 0 ? (consumed / target).clamp(0.0, 1.0) : 0.0;
+    final isOver = consumed > target;
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.lg), // was AppSpacing.xl
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(Icons.local_fire_department, size: 16, color: c.primary),
+                const SizedBox(width: AppSpacing.xs),
+                Text(
+                  "Today's Calories",
+                  style: AppTextStyles.bodyCompact.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: c.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'Goal: $target kcal',
+                  style: AppTextStyles.caption.copyWith(color: c.textSecondary),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md), // was AppSpacing.lg
+            Row(
+              children: [
+                // Smaller ring
+                SizedBox(
+                  width: 88, // was 100
+                  height: 88, // was 100
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 88,
+                        height: 88,
+                        child: CircularProgressIndicator(
+                          value: progress,
+                          strokeWidth: 9, // was 10
+                          backgroundColor: isOver
+                              ? c.warning.withOpacity(0.15)
+                              : c.primary.withOpacity(0.12),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isOver ? c.warning : c.primary,
+                          ),
+                          strokeCap: StrokeCap.round,
+                        ),
+                      ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '$consumed',
+                            style: AppTextStyles.statValue.copyWith(
+                              color: isOver ? c.warning : c.primary,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 20, // was 22
+                            ),
+                          ),
+                          Text(
+                            'kcal',
+                            style: AppTextStyles.micro.copyWith(
+                              color: c.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.lg), // was AppSpacing.xl
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _CalStat(
+                        label: 'Eaten',
+                        value: '$consumed kcal',
+                        color: c.primary,
+                        icon: Icons.restaurant_outlined,
+                      ),
+                      const SizedBox(
+                        height: AppSpacing.sm,
+                      ), // was AppSpacing.md
+                      _CalStat(
+                        label: isOver ? 'Over by' : 'Remaining',
+                        value: '${isOver ? consumed - target : remaining} kcal',
+                        color: isOver ? c.warning : c.success,
+                        icon: isOver
+                            ? Icons.warning_amber_rounded
+                            : Icons.check_circle_outline,
+                      ),
+                      const SizedBox(
+                        height: AppSpacing.sm,
+                      ), // was AppSpacing.md
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${(progress * 100).toStringAsFixed(0)}% of goal',
+                            style: AppTextStyles.micro.copyWith(
+                              color: c.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 6,
+                              backgroundColor: c.primary.withOpacity(0.1),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isOver ? c.warning : c.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CalStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final IconData icon;
+  const _CalStat({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          // ADD Expanded to prevent overflow
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min, // ADD this
+            children: [
+              Text(
+                label,
+                style: AppTextStyles.micro.copyWith(color: c.textSecondary),
+                overflow: TextOverflow.ellipsis, // ADD this
+              ),
+              Text(
+                value,
+                style: AppTextStyles.caption.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+                overflow: TextOverflow.ellipsis, // ADD this
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}

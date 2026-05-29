@@ -26,7 +26,7 @@ class ScanViewModel extends ChangeNotifier {
       if (!_aiService.isReady) {
         ActivityLogger.instance.log(
           ActivityEventType.aiModelLoadFailed,
-          errorMessage: 'TFLite DistilBERT model failed to initialise',
+          errorMessage: 'ONNX DistilBERT model failed to initialise',
         );
       }
       notifyListeners();
@@ -47,6 +47,7 @@ class ScanViewModel extends ChangeNotifier {
   ScanResultModel? extractedResult;
   bool hasSuspiciousIngredients = false;
   double aiConfidence = 0.0;
+  String aiLabel = ''; // 'Authentic' | 'Spiked' | 'Plant-Based'
 
   /// True when OCR quality score < 0.40. AI inference is skipped.
   bool lowOcrQuality = false;
@@ -61,6 +62,8 @@ class ScanViewModel extends ChangeNotifier {
       return 'Scan quality too low — results may be inaccurate';
     if (lowAiConfidence)
       return 'AI confidence low ($pct) — please verify manually';
+    if (aiLabel == 'Plant-Based')
+      return 'Plant-Based Protein detected ($pct confidence)';
     return hasSuspiciousIngredients
         ? 'Potential amino spiking detected ($pct confidence)'
         : 'No suspicious ingredients found ($pct confidence)';
@@ -112,11 +115,14 @@ class ScanViewModel extends ChangeNotifier {
 
         hasSuspiciousIngredients = result['isSpiked'] as bool;
         aiConfidence = result['confidence'] as double;
+        aiLabel = result['label'] as String? ?? '';
         lowAiConfidence = aiConfidence < 0.50;
 
         ActivityLogger.instance.logScan(
           ocrText: scannedText!,
-          label: hasSuspiciousIngredients ? 'SPIKED' : 'CLEAN',
+          label: aiLabel.isNotEmpty
+              ? aiLabel
+              : (hasSuspiciousIngredients ? 'SPIKED' : 'CLEAN'),
           confidence: aiConfidence,
           imagePath: imageFile.path,
           flagged: (result['flagged'] as List?)?.cast<String>() ?? [],
@@ -126,12 +132,18 @@ class ScanViewModel extends ChangeNotifier {
         // Fallback: rule-based only
         hasSuspiciousIngredients = false;
         aiConfidence = 0.0;
+        aiLabel = '';
         ActivityLogger.instance.log(
           ActivityEventType.aiPredictionLowConfidence,
           ocrExtractedText: scannedText,
           errorMessage: 'Skipped AI: OCR quality gate failed',
           scanImagePath: imageFile.path,
         );
+      } else {
+        // AI not ready or no ingredient text — rule-based fallback
+        hasSuspiciousIngredients = false;
+        aiConfidence = 0.0;
+        aiLabel = '';
       }
 
       // Stage 5: slow pipeline alert (> 5s)
@@ -163,7 +175,7 @@ class ScanViewModel extends ChangeNotifier {
   Future<bool> saveScanResult({
     required String uid,
     required ScanResultModel confirmed,
-    DateTime? targetDate, // ← ADD
+    DateTime? targetDate,
   }) async {
     isSaving = true;
     errorMessage = null;
@@ -171,6 +183,10 @@ class ScanViewModel extends ChangeNotifier {
 
     try {
       final logDate = targetDate ?? DateTime.now();
+
+      // Build a human-readable analysis result string using the label
+      final analysisResult = _buildAnalysisResult();
+
       final log = FoodLogModel(
         foodLogID: _uuid.v4(),
         userId: uid,
@@ -178,7 +194,7 @@ class ScanViewModel extends ChangeNotifier {
             ? 'Scanned Product'
             : confirmed.productName,
         calorieIntake: confirmed.calories,
-        foodLogDate: logDate, // ← was DateTime.now()
+        foodLogDate: logDate,
         loggedAt: DateTime.now(),
         protein: confirmed.protein,
         carbs: confirmed.carbs,
@@ -190,9 +206,7 @@ class ScanViewModel extends ChangeNotifier {
         sodium: confirmed.sodium,
         imagePath: scannedImageFile?.path,
         scanConfidence: confirmed.extractionConfidence,
-        scanAnalysisResult: hasSuspiciousIngredients
-            ? 'SPIKED (${(aiConfidence * 100).toStringAsFixed(0)}%)'
-            : 'CLEAN (${(aiConfidence * 100).toStringAsFixed(0)}%)',
+        scanAnalysisResult: analysisResult,
       );
 
       await _foodLogRepo.addFoodLog(uid, log);
@@ -202,7 +216,7 @@ class ScanViewModel extends ChangeNotifier {
         foodName: log.foodLogName,
         calories: log.calorieIntake,
         foodSource: 'scanned',
-        aiPredictionLabel: log.scanAnalysisResult,
+        aiPredictionLabel: analysisResult,
         aiConfidence: aiConfidence,
       );
 
@@ -220,9 +234,22 @@ class ScanViewModel extends ChangeNotifier {
     return true;
   }
 
+  // Builds the scanAnalysisResult string stored in FoodLogModel
+  String _buildAnalysisResult() {
+    final pct = '${(aiConfidence * 100).toStringAsFixed(0)}%';
+    if (aiLabel.isEmpty) return 'Unknown';
+    switch (aiLabel) {
+      case 'Spiked':
+        return 'SPIKED ($pct)';
+      case 'Plant-Based':
+        return 'PLANT-BASED ($pct)';
+      case 'Authentic':
+      default:
+        return 'AUTHENTIC ($pct)';
+    }
+  }
+
   // ── OCR quality assessment ────────────────────────────────────────────────
-  // Scores 0.0 (garbage) to 1.0 (clean label scan).
-  // A "good" line is ≥ 60% ASCII alphanumerics.
 
   double _assessOcrQuality(List<String> lines) {
     if (lines.isEmpty) return 0.0;
@@ -256,6 +283,7 @@ class ScanViewModel extends ChangeNotifier {
     extractedResult = null;
     hasSuspiciousIngredients = false;
     aiConfidence = 0.0;
+    aiLabel = '';
     lowOcrQuality = false;
     lowAiConfidence = false;
     scannedImageFile = imageFile;
@@ -270,6 +298,7 @@ class ScanViewModel extends ChangeNotifier {
     extractedResult = null;
     hasSuspiciousIngredients = false;
     aiConfidence = 0.0;
+    aiLabel = '';
     lowOcrQuality = false;
     lowAiConfidence = false;
     scannedImageFile = null;

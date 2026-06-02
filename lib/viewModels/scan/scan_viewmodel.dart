@@ -1,3 +1,5 @@
+// lib/viewModels/scan/scan_viewmodel.dart
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -10,8 +12,24 @@ import 'package:cal0appv2/services/scan/ai_service.dart';
 import 'package:cal0appv2/services/scan/nutrition_extractor_service.dart';
 import 'package:cal0appv2/services/scan/image_preprocessor_service.dart';
 import 'package:cal0appv2/services/scan/ocr_text_cleaner_service.dart';
+import 'package:cal0appv2/services/scan/gemini_vision_service.dart';
+import 'package:cal0appv2/services/logs/debuglog_services.dart';
 import 'package:cal0appv2/services/logging/activity_logger.dart';
 import 'package:cal0appv2/models/logging/activity_log.dart';
+import 'package:cal0appv2/models/whey/whey_supplement_model.dart';
+import 'package:cal0appv2/repositories/whey_supplement_repository.dart';
+
+// ── Known "special" ingredient database ──────────────────────────────────────
+//
+// These are ingredients that are noteworthy on a supplement label:
+//   - Amino spiking agents (added cheap amino acids to inflate protein readings)
+//   - Performance compounds that consumers should know about
+//   - Compounds that affect protein quality scoring
+//
+// The rule-based detector finds these from OCR text regardless of AI confidence,
+// which is what the user asked about: "why is my model useless?"
+// Answer: the DistilBERT model classifies the WHOLE label as Authentic/Spiked/Plant-Based.
+// This rule-based system is the layer that explains WHICH ingredients caused that verdict.
 
 class _IngredientRule {
   final String name; // display name
@@ -171,10 +189,12 @@ class DetectedIngredient {
 class ScanViewModel extends ChangeNotifier {
   final ScanRepository _scanRepo;
   final FoodLogRepository _foodLogRepo;
+  final WheySupplementRepository _wheyRepo = WheySupplementRepository();
   final AminoSpikingAI _aiService = AminoSpikingAI();
   final NutritionExtractorService _extractor = NutritionExtractorService();
   final ImagePreprocessorService _preprocessor = ImagePreprocessorService();
   final OcrTextCleanerService _cleaner = OcrTextCleanerService();
+  final GeminiVisionService _gemini = GeminiVisionService();
   final _uuid = const Uuid();
 
   ScanViewModel({
@@ -229,6 +249,10 @@ class ScanViewModel extends ChangeNotifier {
   /// Rule-based detected ingredients with explanations.
   /// Populated regardless of AI model status.
   List<DetectedIngredient> detectedIngredients = [];
+
+  /// True when Gemini Vision successfully extracted the nutrition values.
+  /// False means the regex fallback was used instead.
+  bool geminiUsed = false;
 
   bool get showingOverlay =>
       isScanning &&
@@ -350,13 +374,15 @@ class ScanViewModel extends ChangeNotifier {
             : null,
       );
 
-      // Stage 4: Analyse merged text
+      // Stage 4: Extract nutrition values
+      // Strategy: Gemini Vision first (accurate, handles any layout).
+      // Falls back to regex if API key not set or request fails.
       _setStage(ScanStage.analyzingIngredients);
       isAnalyzing = true;
       notifyListeners();
 
+      // Extractor for ingredient text / product name baseline
       extractedResult = _extractor.extract(mergedLines);
-
       if (cleanedOcr!.hasIngredients &&
           extractedResult!.ingredientText.isEmpty) {
         extractedResult = extractedResult!.copyWith(
@@ -370,6 +396,24 @@ class ScanViewModel extends ChangeNotifier {
         );
       }
 
+      // Gemini Vision: sends raw images so it sees the actual table layout
+      final geminiResult = await _gemini.extractNutrition(imageFiles);
+      if (geminiResult.hasData) {
+        LogService.info('GeminiVision: succeeded — using Gemini values');
+        extractedResult = _applyGeminiResult(extractedResult!, geminiResult);
+        geminiUsed = true;
+      } else {
+        // Fallback: regex on OCR text
+        LogService.info('GeminiVision: unavailable — regex fallback');
+        final rawOcrText = scannedLines.join('\n');
+        extractedResult = _mergeNutritionFromOcr(
+          extractedResult!,
+          cleanedOcr!.nutritionSection,
+          rawOcrText,
+        );
+        geminiUsed = false;
+      }
+
       final textForDetection = _bestIngredientText(
         extracted: extractedResult!.ingredientText,
         cleaned: cleanedOcr!.ingredientSection,
@@ -377,16 +421,6 @@ class ScanViewModel extends ChangeNotifier {
         allLines: scannedLines,
       );
       detectedIngredients = _detectIngredients(textForDetection);
-
-      // Pass both the nutrition section AND the raw joined lines.
-      // Raw lines preserve newlines between labels and values — critical for dotAll regex.
-      final rawOcrText = scannedLines.join('\n');
-      extractedResult = _mergeNutritionFromOcr(
-        extractedResult!,
-        cleanedOcr!.nutritionSection,
-        rawOcrText,
-      );
-
       // Stage 5: AI on merged ingredient text
       _setStage(ScanStage.generatingInsights);
 
@@ -500,14 +534,12 @@ class ScanViewModel extends ChangeNotifier {
         errorMessage: lowOcrQuality ? 'OCR quality gate failed' : null,
       );
 
-      // 4. Analyse ingredients
+      // 4. Extract nutrition values
       _setStage(ScanStage.analyzingIngredients);
       isAnalyzing = true;
       notifyListeners();
 
       extractedResult = _extractor.extract(scannedLines);
-
-      // Enrich with cleaner sections when extractor missed them
       if (cleanedOcr!.hasIngredients &&
           extractedResult!.ingredientText.isEmpty) {
         extractedResult = extractedResult!.copyWith(
@@ -521,9 +553,23 @@ class ScanViewModel extends ChangeNotifier {
         );
       }
 
-      // Rule-based ingredient detection — runs on ALL scans regardless of AI.
-      // Uses the broadest available text so nothing is missed:
-      // priority: extracted section → cleaner section → full OCR text
+      // Gemini Vision: sends the raw image for accurate nutrition extraction
+      final geminiResult = await _gemini.extractNutrition([imageFile]);
+      if (geminiResult.hasData) {
+        LogService.info('GeminiVision: succeeded — using Gemini values');
+        extractedResult = _applyGeminiResult(extractedResult!, geminiResult);
+        geminiUsed = true;
+      } else {
+        LogService.info('GeminiVision: unavailable — regex fallback');
+        final rawOcrText = scannedLines.join('\n');
+        extractedResult = _mergeNutritionFromOcr(
+          extractedResult!,
+          cleanedOcr!.nutritionSection,
+          rawOcrText,
+        );
+        geminiUsed = false;
+      }
+
       final textForDetection = _bestIngredientText(
         extracted: extractedResult!.ingredientText,
         cleaned: cleanedOcr!.ingredientSection,
@@ -531,15 +577,6 @@ class ScanViewModel extends ChangeNotifier {
         allLines: scannedLines,
       );
       detectedIngredients = _detectIngredients(textForDetection);
-
-      // Direct number extraction from OCR — fills fields the existing extractor missed
-      final rawOcrText = scannedLines.join('\n');
-      extractedResult = _mergeNutritionFromOcr(
-        extractedResult!,
-        cleanedOcr!.nutritionSection,
-        rawOcrText,
-      );
-
       // 5. Generate insights (AI)
       _setStage(ScanStage.generatingInsights);
 
@@ -613,6 +650,32 @@ class ScanViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── Apply Gemini result to ScanResultModel ───────────────────────────────
+  // Overwrites all fields Gemini found. Keeps existing values for anything
+  // Gemini returned as 0 (meaning it wasn't found on the label).
+  ScanResultModel _applyGeminiResult(
+    ScanResultModel existing,
+    GeminiNutritionResult gemini,
+  ) {
+    return existing.copyWith(
+      productName: gemini.productName.isNotEmpty
+          ? gemini.productName
+          : existing.productName,
+      calories: gemini.calories > 0 ? gemini.calories : existing.calories,
+      protein: gemini.protein > 0 ? gemini.protein : existing.protein,
+      carbs: gemini.carbs > 0 ? gemini.carbs : existing.carbs,
+      fat: gemini.fat > 0 ? gemini.fat : existing.fat,
+      sugar: gemini.sugar > 0 ? gemini.sugar : existing.sugar,
+      sodium: gemini.sodium > 0 ? gemini.sodium : existing.sodium,
+      servingSize: gemini.servingSize > 0
+          ? gemini.servingSize
+          : existing.servingSize,
+      ingredientText: gemini.ingredientText.isNotEmpty
+          ? gemini.ingredientText
+          : existing.ingredientText,
+    );
+  }
+
   // ── Best ingredient text helper ──────────────────────────────────────────
   // Returns the richest available text for ingredient detection.
   // Falls back to the full OCR text when sections weren't isolated.
@@ -637,33 +700,24 @@ class ScanViewModel extends ChangeNotifier {
     String nutritionSection,
     String fullText,
   ) {
-    // Use nutrition section if available, fall back to full text
+    // Use nutrition section if available, fall back to full text.
+    // Always ALWAYS parse — overwrite even non-zero fields from the extractor
+    // because the extractor may have grabbed the wrong column on two-column labels.
     final src = nutritionSection.isNotEmpty ? nutritionSection : fullText;
     if (src.isEmpty) return result;
 
-    final lower = src.toLowerCase();
+    // Lowercase + strip kJ parentheticals before matching
+    final lower = _stripKj(src.toLowerCase());
 
-    int? calories = result.calories > 0
-        ? null
-        : _parseNutritionValue(lower, _caloriePat);
-    double? protein = (result.protein > 0)
-        ? null
-        : _parseNutritionDouble(lower, _proteinPat);
-    double? carbs = (result.carbs > 0)
-        ? null
-        : _parseNutritionDouble(lower, _carbPat);
-    double? fat = (result.fat > 0)
-        ? null
-        : _parseNutritionDouble(lower, _fatPat);
-    double? sugar = ((result.sugar ?? 0) > 0)
-        ? null
-        : _parseNutritionDouble(lower, _sugarPat);
-    double? sodium = ((result.sodium ?? 0) > 0)
-        ? null
-        : _parseNutritionDouble(lower, _sodiumPat);
-    double? serving = ((result.servingSize ?? 0) > 0)
-        ? null
-        : _parseNutritionDouble(lower, _servingPat);
+    // Always parse fresh from OCR — don't skip fields that already have values.
+    // The two-column bug means existing values may be from the wrong column.
+    final int? calories = _parseNutritionValue(lower, _caloriePat);
+    final double? protein = _parseNutritionDouble(lower, _proteinPat);
+    final double? carbs = _parseNutritionDouble(lower, _carbPat);
+    final double? fat = _parseNutritionDouble(lower, _fatPat);
+    final double? sugar = _parseNutritionDouble(lower, _sugarPat);
+    final double? sodium = _parseNutritionDouble(lower, _sodiumPat);
+    final double? serving = _parseNutritionDouble(lower, _servingPat);
 
     // Only copyWith if we found something new
     if (calories == null &&
@@ -689,53 +743,79 @@ class ScanViewModel extends ChangeNotifier {
 
   // Patterns that match "label ... number unit" flexibly:
   //   "calories 120", "energy: 120 kcal", "cal 120 per serving" etc.
-  // dotAll: true makes . match newlines — critical for nutrition panels
-  // where the value is often on the line BELOW the label.
-  // Gap increased to 60 chars to handle "Amount Per Serving\nCalories\n120".
+  // ── Nutrition label parser ────────────────────────────────────────────────
+  //
+  // Two-column label problem:
+  //   Many supplement labels print "Per Serving | Per 100g" side by side.
+  //   OCR reads left-to-right and produces lines like "Protein 17.7g 59g".
+  //   The first number after the label keyword is ALWAYS the per-serving value.
+  //
+  // kJ parenthetical problem:
+  //   "Energy 120 (502kJ)" — strip the (NNNkJ) block first so the regex
+  //   doesn't skip past 120 looking for a digit after the parenthetical.
+  //
+  // Strategy: strip kJ blocks, then find the keyword, then grab the FIRST
+  // number that follows it (within 60 chars, dotAll for next-line layouts).
+  // The per-serving column is always printed before the per-100g column.
+
+  static String _stripKj(String text) =>
+      text.replaceAll(RegExp(r'\(\d+\.?\d*\s*kj\)', caseSensitive: false), '');
+
+  // Patterns anchor to the label keyword then grab the FIRST number following.
+  // dotAll: true handles values on the next line.
+  // The \D{0,40} gap stops at 40 non-digit chars so we don't skip columns.
   static final _caloriePat = RegExp(
-    r'(?:calorie|energy|kcal|cal|tenaga)[^\d]{0,60}(\d{1,4})',
+    r'(?:energy|calorie|kcal|cal|tenaga)\D{0,40}(\d{1,4})',
     caseSensitive: false,
     dotAll: true,
   );
   static final _proteinPat = RegExp(
-    r'protein[^\d]{0,60}(\d{1,3}(?:\.\d{1,2})?)',
+    r'protein\D{0,40}(\d{1,3}\.?\d{0,2})',
     caseSensitive: false,
     dotAll: true,
   );
   static final _carbPat = RegExp(
-    r'(?:carbohydrate|carbs?|total carb|karbohidrat)[^\d]{0,60}(\d{1,3}(?:\.\d{1,2})?)',
+    r'(?:carbohydrate|carbs?|karbohidrat)\D{0,40}(\d{1,3}\.?\d{0,2})',
     caseSensitive: false,
     dotAll: true,
   );
   static final _fatPat = RegExp(
-    r'(?:total fat|fat|lemak)[^\d]{0,60}(\d{1,3}(?:\.\d{1,2})?)',
+    r'total fat\D{0,40}(\d{1,3}\.?\d{0,2})',
     caseSensitive: false,
     dotAll: true,
   );
   static final _sugarPat = RegExp(
-    r'(?:total sugars?|sugars?|gula)[^\d]{0,60}(\d{1,3}(?:\.\d{1,2})?)',
+    r'total sugar\D{0,40}(\d{1,3}\.?\d{0,2})',
     caseSensitive: false,
     dotAll: true,
   );
   static final _sodiumPat = RegExp(
-    r'(?:sodium|natrium)[^\d]{0,60}(\d{1,4}(?:\.\d{1,2})?)',
+    r'sodium\D{0,40}(\d{1,4}\.?\d{0,2})',
     caseSensitive: false,
     dotAll: true,
   );
   static final _servingPat = RegExp(
-    r'(?:serving size|saiz hidangan)[^\d]{0,60}(\d{1,3}(?:\.\d{1,2})?)',
+    r'serving size\D{0,40}(\d{1,3}\.?\d{0,2})',
+    caseSensitive: false,
+    dotAll: true,
+  );
+  // Creatine Monohydrate — treated as a nutrition value row on this label
+  static final _creatinePat = RegExp(
+    r'creatine monohydrate\D{0,40}(\d{1,3}\.?\d{0,2})',
     caseSensitive: false,
     dotAll: true,
   );
 
   int? _parseNutritionValue(String text, RegExp pattern) {
-    final match = pattern.firstMatch(text);
+    final clean = _stripKj(text);
+    final match = pattern.firstMatch(clean);
     if (match == null) return null;
     return int.tryParse(match.group(1) ?? '');
   }
 
   double? _parseNutritionDouble(String text, RegExp pattern) {
-    final match = pattern.firstMatch(text);
+    final clean = _stripKj(text);
+    final match = pattern.firstMatch(clean);
     if (match == null) return null;
     return double.tryParse(match.group(1) ?? '');
   }
@@ -770,6 +850,7 @@ class ScanViewModel extends ChangeNotifier {
   Future<bool> saveScanResult({
     required String uid,
     required ScanResultModel confirmed,
+    String brandName = '',
     DateTime? targetDate,
   }) async {
     isSaving = true;
@@ -803,6 +884,30 @@ class ScanViewModel extends ChangeNotifier {
       );
 
       await _foodLogRepo.addFoodLog(uid, log);
+
+      // ── Also write to dedicated whey_supplements collection ──────────────
+      final wheyDoc = WheySupplementModel(
+        id: log.foodLogID,
+        userId: uid,
+        brandName: brandName.trim(),
+        productName: log.foodLogName,
+        calories: log.calorieIntake,
+        protein: log.protein ?? 0,
+        carbs: log.carbs ?? 0,
+        fat: log.fats ?? 0,
+        sugar: log.sugar,
+        sodium: log.sodium,
+        servingSize: log.servingSize,
+        servingUnit: log.servingUnit,
+        aiVerdict: aiLabel.isNotEmpty ? aiLabel : 'Unknown',
+        aiConfidence: aiConfidence,
+        isSpiked: hasSuspiciousIngredients,
+        flaggedIngredients: detectedIngredients.map((d) => d.name).toList(),
+        ocrConfidence: ocrConfidence > 0 ? ocrConfidence : null,
+        imagePath: scannedImageFile?.path,
+        loggedAt: DateTime.now(),
+      );
+      await _wheyRepo.addSupplement(wheyDoc);
 
       ActivityLogger.instance.log(
         ActivityEventType.scanResultSaved,
@@ -886,6 +991,7 @@ class ScanViewModel extends ChangeNotifier {
     detectedIngredients = [];
     lowOcrQuality = false;
     lowAiConfidence = false;
+    geminiUsed = false;
     scannedImageFile = imageFile;
     notifyListeners();
   }
@@ -907,6 +1013,7 @@ class ScanViewModel extends ChangeNotifier {
     detectedIngredients = [];
     lowOcrQuality = false;
     lowAiConfidence = false;
+    geminiUsed = false;
     scannedImageFile = null;
     currentStage = ScanStage.idle;
     isScanning = false;

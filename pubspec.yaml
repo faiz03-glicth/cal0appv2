@@ -50,7 +50,7 @@ dependencies:
   openfoodfacts: ^3.30.2
   flutter_onnxruntime: ^1.5.1
   image: ^4.0.0
-  
+  flutter_dotenv: ^5.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

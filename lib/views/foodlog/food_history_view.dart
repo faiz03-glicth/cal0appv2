@@ -350,7 +350,7 @@ class _Thumbnail extends StatelessWidget {
         child: Image.file(
           File(log.imagePath!),
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _IconThumbnail(log: log),
+          errorBuilder: (_, _, _) => _IconThumbnail(log: log),
         ),
       );
     }

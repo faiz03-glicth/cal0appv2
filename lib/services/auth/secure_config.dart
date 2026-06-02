@@ -14,8 +14,9 @@ class SecureConfig {
 
   static Future<void> init() async {
     // Nothing to initialise for OpenFoodFacts.
-    if (kDebugMode)
+    if (kDebugMode) {
       debugPrint('[SecureConfig] init — KaloriAPI removed, OFF needs no key');
+    }
   }
 
   static Future<void> clear() async {

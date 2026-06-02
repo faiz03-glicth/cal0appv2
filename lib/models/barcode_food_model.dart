@@ -73,16 +73,16 @@ class BarcodeFoodModel {
     final product = json['product'] as Map<String, dynamic>? ?? {};
     final nutriments = product['nutriments'] as Map<String, dynamic>? ?? {};
 
-    double? _n(String key) {
+    double? n(String key) {
       final v = nutriments['${key}_100g'] ?? nutriments[key];
       if (v == null) return null;
       return (v as num).toDouble();
     }
 
-    int? _cal() {
+    int? cal() {
       final v =
-          _n('energy-kcal') ??
-          (_n('energy') != null ? _n('energy')! / 4.184 : null);
+          n('energy-kcal') ??
+          (n('energy') != null ? n('energy')! / 4.184 : null);
       return v?.round();
     }
 
@@ -95,15 +95,15 @@ class BarcodeFoodModel {
           '',
       brandName: product['brands'],
       imageUrl: product['image_front_url'] ?? product['image_url'],
-      calories: _cal(),
-      protein: _n('proteins'),
-      carbs: _n('carbohydrates'),
-      fat: _n('fat'),
-      sugar: _n('sugars'),
-      sodium: _n('sodium') != null
-          ? _n('sodium')! * 1000
-          : _n('salt') != null
-          ? _n('salt')! * 400
+      calories: cal(),
+      protein: n('proteins'),
+      carbs: n('carbohydrates'),
+      fat: n('fat'),
+      sugar: n('sugars'),
+      sodium: n('sodium') != null
+          ? n('sodium')! * 1000
+          : n('salt') != null
+          ? n('salt')! * 400
           : null,
       servingSize: double.tryParse(
         product['serving_quantity']?.toString() ?? '',

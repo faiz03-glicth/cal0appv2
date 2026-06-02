@@ -50,10 +50,11 @@ class ActivityLogger {
         : Platform.isMacOS
         ? 'macos'
         : 'other';
-    if (kDebugMode)
+    if (kDebugMode) {
       debugPrint(
         '[AL] init uid=${uid.substring(0, 6)}… sess=${_sessionId!.substring(0, 8)}',
       );
+    }
     log(ActivityEventType.sessionStart);
   }
 

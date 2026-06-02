@@ -246,8 +246,9 @@ class OFFService {
   String? _safeString(dynamic value) {
     if (value == null) return null;
     if (value is String) return value.trim().isEmpty ? null : value.trim();
-    if (value is List)
+    if (value is List) {
       return value.join(', ').trim().isEmpty ? null : value.join(', ').trim();
+    }
     return value.toString().trim();
   }
 

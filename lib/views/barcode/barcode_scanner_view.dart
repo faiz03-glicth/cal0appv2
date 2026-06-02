@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:cal0appv2/viewModels/scan/barcode_viewmodel.dart';
 import 'package:cal0appv2/views/barcode/barcode_result_sheet.dart';
-import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 
 class BarcodeScannerView extends StatefulWidget {
   const BarcodeScannerView({super.key});

@@ -238,7 +238,7 @@ class _RecentFoodsRow extends StatelessWidget {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: recent.length,
-                separatorBuilder: (_, __) =>
+                separatorBuilder: (_, _) =>
                     const SizedBox(width: AppSpacing.sm),
                 itemBuilder: (_, i) => _RecentChip(
                   entry: recent[i],
@@ -472,7 +472,7 @@ class _FoodResultCard extends StatelessWidget {
                       width: 44,
                       height: 44,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _FoodIcon(c: c),
+                      errorBuilder: (_, _, _) => _FoodIcon(c: c),
                     )
                   : _FoodIcon(c: c),
             ),

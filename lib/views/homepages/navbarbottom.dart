@@ -1,18 +1,19 @@
 import 'package:cal0appv2/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import '/../views/users/userprofile_view.dart';
 import '/../views/homepages/tabs/home_tabs.dart';
 import '/../views/homepages/tabs/dashboard_view.dart';
 import '/../views/widgets/food_sheet.dart';
 import '/../views/barcode/barcode_scanner_view.dart';
+import '/../views/widgets/scan_loading_overlay.dart';
 import '/../viewModels/scan/barcode_viewmodel.dart';
 import '/../viewModels/scan/scan_viewmodel.dart';
-import '/../viewModels/viewauth/auth_viewmodel.dart';
 import '/../viewModels/foodlog/foodlog_viewmodel.dart';
 import '/../views/widgets/scan_confirm_sheet.dart';
+import '/../views/scan/multi_angle_capture_screen.dart';
+import 'package:cal0appv2/models/scan/scan_stage.dart';
+import 'package:cal0appv2/models/scan_result_model.dart';
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -23,7 +24,6 @@ class Homepage extends StatefulWidget {
 class _HomepageState extends State<Homepage> {
   int _currentIndex = 0;
 
-  // Only 3 tabs now — Scan tab removed
   final List<Widget> _pages = [
     const HomeTab(),
     const DashboardTab(),
@@ -35,7 +35,8 @@ class _HomepageState extends State<Homepage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _AddFoodModal(),
+      // Pass the live scaffold context so modal children can use it after pop
+      builder: (_) => _AddFoodModal(scaffoldContext: context),
     );
   }
 
@@ -52,17 +53,13 @@ class _HomepageState extends State<Homepage> {
       highlightColor: Colors.transparent,
       child: SizedBox(
         width: 65,
-        height: 56, // ADD fixed height
+        height: 56,
         child: Column(
-          mainAxisSize: MainAxisSize.min, // ADD this
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              color: isSelected ? c.primary : c.slate,
-              size: 22,
-            ), // reduce from 24
-            const SizedBox(height: 2), // reduce from 4
+            Icon(icon, color: isSelected ? c.primary : c.slate, size: 22),
+            const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
@@ -80,17 +77,42 @@ class _HomepageState extends State<Homepage> {
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
+
+    // Listen to ScanViewModel so the overlay reacts to every stage change
+    final scanVm = context.watch<ScanViewModel>();
+    final showOverlay =
+        scanVm.isScanning &&
+        scanVm.currentStage != ScanStage.idle &&
+        scanVm.currentStage != ScanStage.done;
+
     return Scaffold(
       extendBody: true,
-      body: IndexedStack(index: _currentIndex, children: _pages),
+      // ── Stack wraps body so the overlay renders above everything ────────
+      body: Stack(
+        children: [
+          // Main tab content
+          IndexedStack(index: _currentIndex, children: _pages),
+
+          // Scan loading overlay — only visible while pipeline is running
+          if (showOverlay)
+            Positioned.fill(
+              child: ScanLoadingOverlay(stage: scanVm.currentStage),
+            ),
+        ],
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _openActionModal(context),
-        backgroundColor: c.primary,
+        // Disable FAB while scanning to prevent double-taps
+        onPressed: showOverlay ? null : () => _openActionModal(context),
+        backgroundColor: showOverlay ? c.slate : c.primary,
         elevation: 6,
         shape: const CircleBorder(),
         tooltip: 'Add food',
-        child: const Icon(Icons.add, color: Colors.white, size: 32),
+        child: Icon(
+          showOverlay ? Icons.hourglass_empty : Icons.add,
+          color: Colors.white,
+          size: 32,
+        ),
       ),
       bottomNavigationBar: BottomAppBar(
         color: c.card,
@@ -98,7 +120,7 @@ class _HomepageState extends State<Homepage> {
         notchMargin: 8.0,
         elevation: 8,
         padding: EdgeInsets.zero,
-        height: 60, // ADD explicit height
+        height: 60,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -114,7 +136,7 @@ class _HomepageState extends State<Homepage> {
                 ),
               ],
             ),
-            const SizedBox(width: 80),
+            const SizedBox(width: 80), // FAB notch gap
             Row(
               children: [
                 _buildNavItem(
@@ -133,8 +155,14 @@ class _HomepageState extends State<Homepage> {
 }
 
 // ── Add Food Modal ─────────────────────────────────────────────────────────
+//
+// scaffoldContext comes from Homepage.build() — it stays alive for the entire
+// camera + scan pipeline, so scaffoldContext.mounted is reliable after pop.
 
 class _AddFoodModal extends StatelessWidget {
+  final BuildContext scaffoldContext;
+  const _AddFoodModal({required this.scaffoldContext});
+
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
@@ -177,6 +205,7 @@ class _AddFoodModal extends StatelessWidget {
             crossAxisSpacing: 10,
             childAspectRatio: 1.4,
             children: [
+              // ── Search food ─────────────────────────────────────────
               _ActionCard(
                 icon: Icons.search,
                 label: 'Search food',
@@ -184,20 +213,21 @@ class _AddFoodModal extends StatelessWidget {
                 iconBg: const Color(0xFFEBF3FF),
                 iconColor: const Color(0xFF185FA5),
                 onTap: () {
-                  final foodLogVm = context
-                      .read<FoodLogViewModel>(); // capture BEFORE pop
+                  final foodLogVm = context.read<FoodLogViewModel>();
                   Navigator.pop(context);
                   showModalBottomSheet(
-                    context: context,
+                    context: scaffoldContext,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
                     builder: (_) => ChangeNotifierProvider.value(
-                      value: foodLogVm, // use captured reference, not context
+                      value: foodLogVm,
                       child: const FoodSheet(isEdit: false),
                     ),
                   );
                 },
               ),
+
+              // ── Scan barcode ────────────────────────────────────────
               _ActionCard(
                 icon: Icons.barcode_reader,
                 label: 'Scan barcode',
@@ -205,48 +235,44 @@ class _AddFoodModal extends StatelessWidget {
                 iconBg: const Color(0xFFEAF3DE),
                 iconColor: const Color(0xFF3B6D11),
                 onTap: () {
+                  final barcodeVm = context.read<BarcodeViewModel>();
                   Navigator.pop(context);
                   Navigator.push(
-                    context,
+                    scaffoldContext,
                     MaterialPageRoute(
                       builder: (_) => ChangeNotifierProvider.value(
-                        value: context.read<BarcodeViewModel>(),
+                        value: barcodeVm,
                         child: const BarcodeScannerView(),
                       ),
                     ),
                   );
                 },
               ),
+
+              // ── Photo log ───────────────────────────────────────────
               _ActionCard(
                 icon: Icons.camera_alt_outlined,
                 label: 'Photo log',
                 subtitle: 'OCR label scan',
                 iconBg: const Color(0xFFFAEEDA),
                 iconColor: const Color(0xFF854F0B),
-                onTap: () async {
+                onTap: () {
+                  // Close the modal first
                   Navigator.pop(context);
-                  final picker = ImagePicker();
-                  final picked = await picker.pickImage(
-                    source: ImageSource.camera,
-                    imageQuality: 90,
-                  );
-                  if (picked == null || !context.mounted) return;
-                  final vm = context.read<ScanViewModel>();
-                  await vm.scanImage(File(picked.path));
-                  if (!context.mounted) return;
-                  if (vm.extractedResult != null) {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => ChangeNotifierProvider.value(
-                        value: vm,
-                        child: ScanConfirmSheet(initial: vm.extractedResult!),
+
+                  // Push the multi-angle capture screen.
+                  // scaffoldContext keeps the Homepage overlay alive during scanning.
+                  Navigator.of(scaffoldContext).push(
+                    MaterialPageRoute(
+                      builder: (_) => MultiAngleCaptureScreen(
+                        scaffoldContext: scaffoldContext,
                       ),
-                    );
-                  }
+                    ),
+                  );
                 },
               ),
+
+              // ── Supplement ──────────────────────────────────────────
               _ActionCard(
                 icon: Icons.science_outlined,
                 label: 'Supplement',
@@ -257,7 +283,7 @@ class _AddFoodModal extends StatelessWidget {
                   final foodLogVm = context.read<FoodLogViewModel>();
                   Navigator.pop(context);
                   showModalBottomSheet(
-                    context: context,
+                    context: scaffoldContext,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
                     builder: (_) => ChangeNotifierProvider.value(
@@ -274,6 +300,8 @@ class _AddFoodModal extends StatelessWidget {
     );
   }
 }
+
+// ── Action card ────────────────────────────────────────────────────────────
 
 class _ActionCard extends StatelessWidget {
   final IconData icon;

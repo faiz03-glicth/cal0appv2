@@ -98,7 +98,7 @@ class AminoSpikingAI {
       final rawList = await logitsTensor.asList();
       _disposeOutputs(outputs);
 
-      if (rawList == null || rawList.isEmpty) {
+      if (rawList.isEmpty) {
         LogService.error('AI: empty logits');
         return {
           'isSpiked': false,
@@ -109,7 +109,7 @@ class AminoSpikingAI {
       }
 
       // rawList is flat [v0, v1, v2] since batch=1
-      final List<double> logits = (rawList as List)
+      final List<double> logits = (rawList)
           .map((e) => (e as num).toDouble())
           .toList();
 

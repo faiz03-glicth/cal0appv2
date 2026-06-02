@@ -19,7 +19,7 @@ class RecentScanCarousel extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.md),
+        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.md),
         itemBuilder: (ctx, i) => _ScanCard(item: items[i]),
       ),
     );
@@ -73,7 +73,7 @@ class _ScanCard extends StatelessWidget {
                       width: 140,
                       height: 88,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
+                      errorBuilder: (_, _, _) =>
                           _Placeholder(isSpiked: isSpiked, c: c),
                     )
                   : _Placeholder(isSpiked: isSpiked, c: c),

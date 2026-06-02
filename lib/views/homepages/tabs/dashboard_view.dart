@@ -137,7 +137,7 @@ class _DashboardTabState extends State<DashboardTab> {
                     if (_showCalories)
                       Selector<FoodLogViewModel, int>(
                         selector: (_, vm) => vm.totalCalories,
-                        builder: (_, cal, __) => CalorieRing(
+                        builder: (_, cal, _) => CalorieRing(
                           totalCalories: cal,
                           target: dashVm.calorieTarget,
                         ),
@@ -152,7 +152,7 @@ class _DashboardTabState extends State<DashboardTab> {
                     if (_showMacros)
                       Selector<FoodLogViewModel, NutrientTotals>(
                         selector: (_, vm) => vm.totals,
-                        builder: (_, totals, __) => MacroRow(
+                        builder: (_, totals, _) => MacroRow(
                           totalProtein: totals.protein,
                           totalCarbs: totals.carbs,
                           totalFat: totals.fat,

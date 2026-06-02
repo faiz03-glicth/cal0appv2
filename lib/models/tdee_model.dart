@@ -54,8 +54,9 @@ class TDEEModel {
     if (level.contains('sedentary')) return 1.200;
     if (level.contains('extra') || level.contains('very very')) return 1.900;
     if (level.contains('very active') || level == 'very') return 1.725;
-    if (level.contains('moderate') || level == 'moderately active')
+    if (level.contains('moderate') || level == 'moderately active') {
       return 1.550;
+    }
     if (level.contains('light') || level == 'lightly active') return 1.375;
     if (level.contains('active')) return 1.550; // fallback for bare "active"
 

@@ -76,7 +76,7 @@ class _FoodDetailViewState extends State<FoodDetailView> {
                   width: double.infinity,
                   height: 200,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
               ),
             if (_log.isScanned && _log.imagePath != null)

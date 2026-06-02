@@ -90,7 +90,7 @@ class _AppRootState extends State<_AppRoot> {
         ChangeNotifierProvider(create: (_) => BarcodeViewModel()),
       ],
       child: Consumer<ThemeViewModel>(
-        builder: (_, themeVm, _) => MaterialApp(
+        builder: (context, themeVm, _) => MaterialApp(
           title: 'C0 Calorie Counter',
           theme: C0Theme.lightTheme,
           darkTheme: C0Theme.darkTheme,

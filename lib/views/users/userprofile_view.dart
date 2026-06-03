@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/views/widgets/c0_app_bar.dart';
 import 'package:cal0appv2/viewModels/usermodel/user_viewmodel.dart';
 import 'package:cal0appv2/viewModels/theme/theme_viewmodel.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/viewModels/scan/barcode_viewmodel.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 import 'package:cal0appv2/views/widgets/app_text_field.dart';

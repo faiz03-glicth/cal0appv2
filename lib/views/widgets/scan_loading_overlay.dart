@@ -13,7 +13,7 @@
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/models/scan/scan_stage.dart';
 
 class ScanLoadingOverlay extends StatefulWidget {

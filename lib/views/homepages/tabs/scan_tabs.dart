@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/views/widgets/c0_app_bar.dart';
 import 'package:cal0appv2/views/widgets/scan_confirm_sheet.dart';
 import 'package:cal0appv2/views/barcode/barcode_scanner_view.dart';

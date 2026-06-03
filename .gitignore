@@ -12,7 +12,7 @@
 .swiftpm/
 migrate_working_dir/
 
-//Crypt api
+//ENV files
 .env
 .env.local
 .env*.local

@@ -1,23 +1,8 @@
-// lib/views/scan/multi_angle_capture_screen.dart
-//
-// Guides the user through capturing 3–5 photos of a supplement label
-// from different angles before OCR runs. More angles = more text coverage =
-// fewer missed fields = better AI accuracy.
-//
-// Flow:
-//   1. Instructional overlay on first open (dismissable)
-//   2. Three required slots: Front Panel, Nutrition Facts, Ingredients List
-//   3. Two optional slots: Side Panel, Close-up
-//   4. Each captured image shows a thumbnail + ✓ checkmark
-//   5. "Analyse" button activates once all 3 required slots are filled
-//   6. Tapping an existing thumbnail lets the user retake that angle
-//   7. On confirm → pops back to Homepage scaffold and triggers the scan pipeline
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/viewModels/scan/scan_viewmodel.dart';
 import 'package:cal0appv2/views/widgets/scan_confirm_sheet.dart';
 import 'package:cal0appv2/models/scan_result_model.dart';

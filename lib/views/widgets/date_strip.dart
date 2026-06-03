@@ -1,6 +1,6 @@
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
-import '/../theme/app_theme.dart';
+import '../theme/app_theme.dart';
 
 class DateStrip extends StatefulWidget {
   final DateTime selectedDate;

@@ -1,13 +1,6 @@
-// lib/views/widgets/scan_confirm_sheet.dart
-//
-// Scan result sheet — clean, editable, no raw OCR editor.
-//
-// All macro/nutrition fields are pre-filled from OCR automatically.
-// The user can tap any field to correct a value before saving.
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/models/scan_result_model.dart';
 import 'package:cal0appv2/viewModels/scan/scan_viewmodel.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
@@ -35,48 +28,57 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
   late final TextEditingController _sugar;
   late final TextEditingController _sodium;
   late final TextEditingController _serving;
+  late final TextEditingController _brand;
 
   bool _addToFoodLog = true;
+  bool _filledFromVm = false; // guard: only auto-fill once
 
   @override
   void initState() {
     super.initState();
-    final r = widget.initial;
-
-    _name = TextEditingController(text: r.productName);
-    _calories = TextEditingController(text: _fmt(r.calories));
-    _protein = TextEditingController(text: _fmt(r.protein));
-    _carbs = TextEditingController(text: _fmt(r.carbs));
-    _fat = TextEditingController(text: _fmt(r.fat));
-    _sugar = TextEditingController(text: _fmt(r.sugar));
-    _sodium = TextEditingController(text: _fmt(r.sodium));
-    _serving = TextEditingController(text: _fmt(r.servingSize));
+    // Init with widget.initial — may be ScanResultModel.empty if sheet opened
+    // before the pipeline finished. didChangeDependencies fills for real.
+    _name = TextEditingController(text: widget.initial.productName);
+    _calories = TextEditingController(text: _fmt(widget.initial.calories));
+    _protein = TextEditingController(text: _fmt(widget.initial.protein));
+    _carbs = TextEditingController(text: _fmt(widget.initial.carbs));
+    _fat = TextEditingController(text: _fmt(widget.initial.fat));
+    _sugar = TextEditingController(text: _fmt(widget.initial.sugar));
+    _sodium = TextEditingController(text: _fmt(widget.initial.sodium));
+    _serving = TextEditingController(text: _fmt(widget.initial.servingSize));
+    _brand = TextEditingController();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Re-read vm.extractedResult once widget is in tree.
-    // Overwrites any controller whose current value came from a stale
-    // widget.initial (e.g. ScanResultModel.empty passed before OCR finished).
+    if (_filledFromVm) return;
+
     final vm = context.read<ScanViewModel>();
     final r = vm.extractedResult;
     if (r == null) return;
 
-    _overwrite(_name, r.productName);
-    _overwrite(_calories, _fmt(r.calories));
-    _overwrite(_protein, _fmt(r.protein));
-    _overwrite(_carbs, _fmt(r.carbs));
-    _overwrite(_fat, _fmt(r.fat));
-    _overwrite(_sugar, _fmt(r.sugar));
-    _overwrite(_sodium, _fmt(r.sodium));
-    _overwrite(_serving, _fmt(r.servingSize));
-  }
+    // Mark filled even if r has zeros — prevents repeated calls
+    _filledFromVm = true;
 
-  // Always overwrite — user hasn't edited yet when didChangeDependencies runs
-  void _overwrite(TextEditingController c, String val) {
-    if (val.isEmpty) return;
-    c.text = val;
+    bool changed = false;
+    void fill(TextEditingController c, String val) {
+      if (val.isEmpty) return;
+      c.text = val;
+      changed = true;
+    }
+
+    fill(_name, r.productName);
+    fill(_calories, _fmt(r.calories));
+    fill(_protein, _fmt(r.protein));
+    fill(_carbs, _fmt(r.carbs));
+    fill(_fat, _fmt(r.fat));
+    fill(_sugar, _fmt(r.sugar));
+    fill(_sodium, _fmt(r.sodium));
+    fill(_serving, _fmt(r.servingSize));
+
+    // Trigger rebuild so TextFields show the new values
+    if (changed) setState(() {});
   }
 
   @override
@@ -89,6 +91,7 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
     _sugar.dispose();
     _sodium.dispose();
     _serving.dispose();
+    _brand.dispose();
     super.dispose();
   }
 
@@ -147,6 +150,7 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
     final ok = await vm.saveScanResult(
       uid: uid,
       confirmed: confirmed,
+      brandName: _brand.text.trim(),
       targetDate: targetDate,
     );
     if (ok && ctx.mounted) {
@@ -170,6 +174,10 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
     return AppBottomSheet(
       subtitle: _SheetHeader(confidence: conf),
       children: [
+        // ── DEBUG PANEL — remove before release ──────────────────────
+        _DebugPanel(vm: vm),
+        const SizedBox(height: AppSpacing.md),
+
         // ── AI verdict ────────────────────────────────────────────────
         _AiVerdictBanner(vm: vm),
         const SizedBox(height: AppSpacing.md),
@@ -198,6 +206,14 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
           label: 'Product Name',
           hint: 'e.g. Gold Standard Whey',
           icon: Icons.label_outline,
+          keyboardType: TextInputType.text,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _Field(
+          controller: _brand,
+          label: 'Brand Name',
+          hint: 'e.g. Optimum Nutrition',
+          icon: Icons.storefront_outlined,
           keyboardType: TextInputType.text,
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -408,8 +424,6 @@ class _SectionLabel extends StatelessWidget {
 }
 
 // ── Editable nutrition field ───────────────────────────────────────────────
-// Plain consistent style — pre-filled values are editable, no visual markers.
-
 class _Field extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -1057,6 +1071,173 @@ class _HealthBadge extends StatelessWidget {
           Text(
             'Health check will run on save',
             style: AppTextStyles.micro.copyWith(color: c.primary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DebugPanel extends StatefulWidget {
+  final ScanViewModel vm;
+  const _DebugPanel({required this.vm});
+  @override
+  State<_DebugPanel> createState() => _DebugPanelState();
+}
+
+class _DebugPanelState extends State<_DebugPanel> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    final vm = widget.vm;
+    final r = vm.extractedResult;
+
+    // Summary line shown even when collapsed
+    final hasData =
+        r != null &&
+        (r.calories > 0 || r.protein > 0 || r.carbs > 0 || r.fat > 0);
+    final ocrLines = vm.scannedLines.length;
+    final ocrChars = vm.scannedText?.length ?? 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: hasData
+            ? const Color(0xFF166534).withValues(alpha: 0.15)
+            : const Color(0xFF7F1D1D).withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(
+          color: hasData ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header (always visible) ─────────────────────────────
+          GestureDetector(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.bug_report_outlined,
+                    size: 16,
+                    color: hasData
+                        ? const Color(0xFF22C55E)
+                        : const Color(0xFFEF4444),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      hasData
+                          ? '✓ DEBUG: Data parsed — cal=${r!.calories} pro=${r.protein}g carbs=${r.carbs}g fat=${r.fat}g'
+                          : '✗ DEBUG: No nutrition data parsed — OCR got $ocrLines lines ($ocrChars chars)',
+                      style: AppTextStyles.micro.copyWith(
+                        color: hasData
+                            ? const Color(0xFF22C55E)
+                            : const Color(0xFFEF4444),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: c.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Expanded detail ─────────────────────────────────────
+          if (_expanded) ...[
+            Divider(height: 1, color: c.divider),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Parsed values
+                  _dbgRow('Product name', r?.productName ?? 'empty'),
+                  _dbgRow('Calories', '${r?.calories ?? 0}'),
+                  _dbgRow('Protein', '${r?.protein ?? 0}g'),
+                  _dbgRow('Carbs', '${r?.carbs ?? 0}g'),
+                  _dbgRow('Fat', '${r?.fat ?? 0}g'),
+                  _dbgRow('Sugar', '${r?.sugar ?? 0}g'),
+                  _dbgRow('Sodium', '${r?.sodium ?? 0}mg'),
+                  _dbgRow('Serving', '${r?.servingSize ?? 0}g'),
+                  _dbgRow('OCR lines', '$ocrLines'),
+                  _dbgRow('OCR chars', '$ocrChars'),
+                  _dbgRow(
+                    'OCR conf',
+                    '${(vm.ocrConfidence * 100).toStringAsFixed(0)}%',
+                  ),
+                  _dbgRow('Low quality', '${vm.lowOcrQuality}'),
+                  _dbgRow('Gemini used', '${vm.geminiUsed}'),
+                  _dbgRow('AI label', vm.aiLabel.isEmpty ? 'none' : vm.aiLabel),
+                  const SizedBox(height: AppSpacing.sm),
+
+                  // Raw OCR text
+                  Text(
+                    'Raw OCR text:',
+                    style: AppTextStyles.micro.copyWith(
+                      color: c.textSecondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    decoration: BoxDecoration(
+                      color: c.background,
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      border: Border.all(color: c.divider),
+                    ),
+                    child: SelectableText(
+                      vm.scannedText?.isNotEmpty == true
+                          ? vm.scannedText!
+                          : '(empty — OCR produced no text)',
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 9,
+                        color: c.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _dbgRow(String label, String value) {
+    final c = C0Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: AppTextStyles.micro.copyWith(color: c.textSecondary),
+            ),
+          ),
+          Text(
+            value,
+            style: AppTextStyles.micro.copyWith(
+              color: c.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/models/foodlog_model.dart';
 import 'package:cal0appv2/models/off_food_result.dart';
 import 'package:cal0appv2/services/cache/recent_food_cache.dart';

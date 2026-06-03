@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cal0appv2/theme/app_theme.dart';
+import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/views/widgets/app_card.dart';
 
 /// Macro summary card used in the dashboard MacroRow.

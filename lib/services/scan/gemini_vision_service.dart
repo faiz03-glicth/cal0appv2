@@ -1,22 +1,3 @@
-// lib/services/scan/gemini_vision_service.dart
-//
-// Sends supplement label images to Gemini 1.5 Flash and gets back a
-// structured nutrition result as JSON.
-//
-// Why Gemini instead of regex:
-//   • Understands two-column "Per Serving | Per 100g" layouts natively
-//   • Handles any label language, font, or layout without pattern lists
-//   • Returns only per-serving values — we ask for that explicitly
-//   • Recognises Creatine Monohydrate as a row in the nutrition table
-//   • ~10× more accurate than hand-written regex on real-world labels
-//
-// Setup:
-//   1. Get a free API key from https://aistudio.google.com/app/apikey
-//   2. Add to your .env or Flutter --dart-define:
-//      GEMINI_API_KEY=your_key_here
-//   3. Read it via: const String.fromEnvironment('GEMINI_API_KEY')
-//   4. Add to pubspec.yaml: http: ^1.2.0  (already a common dep)
-
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -103,7 +84,8 @@ class GeminiVisionService {
 
       sw.stop();
       LogService.info(
-          'GeminiVision: HTTP ${response.statusCode} in ${sw.elapsedMilliseconds}ms');
+        'GeminiVision: HTTP ${response.statusCode} in ${sw.elapsedMilliseconds}ms',
+      );
 
       if (response.statusCode != 200) {
         LogService.error('GeminiVision: API error ${response.statusCode}');
@@ -145,7 +127,7 @@ class GeminiVisionService {
         {'parts': parts},
       ],
       'generationConfig': {
-        'temperature': 0.0,     // deterministic — we want facts not creativity
+        'temperature': 0.0, // deterministic — we want facts not creativity
         'maxOutputTokens': 512,
         'responseMimeType': 'application/json',
       },
@@ -211,16 +193,16 @@ Return this exact structure:
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
 
       return GeminiNutritionResult(
-        productName:         _str(data, 'product_name'),
-        calories:            _int(data, 'calories'),
-        protein:             _dbl(data, 'protein_g'),
-        carbs:               _dbl(data, 'carbs_g'),
-        fat:                 _dbl(data, 'fat_g'),
-        sugar:               _dbl(data, 'sugar_g'),
-        sodium:              _dbl(data, 'sodium_mg'),
-        servingSize:         _dbl(data, 'serving_size'),
-        servingUnit:         _str(data, 'serving_unit', fallback: 'g'),
-        ingredientText:      _str(data, 'ingredients'),
+        productName: _str(data, 'product_name'),
+        calories: _int(data, 'calories'),
+        protein: _dbl(data, 'protein_g'),
+        carbs: _dbl(data, 'carbs_g'),
+        fat: _dbl(data, 'fat_g'),
+        sugar: _dbl(data, 'sugar_g'),
+        sodium: _dbl(data, 'sodium_mg'),
+        servingSize: _dbl(data, 'serving_size'),
+        servingUnit: _str(data, 'serving_unit', fallback: 'g'),
+        ingredientText: _str(data, 'ingredients'),
         creatineMonohydrate: _dbl(data, 'creatine_monohydrate_g'),
         isSuccess: true,
       );

@@ -59,11 +59,13 @@ class AuthViewModel extends ChangeNotifier {
       notifyListeners();
       return true;
     } on FirebaseAuthException catch (_) {
-      errorMessage = '503 Service Unavailable. Logout failed due to network issue';
+      errorMessage =
+          '503 Service Unavailable. Logout failed due to network issue';
       notifyListeners();
       return false;
     } catch (_) {
-      errorMessage = '503 Service Unavailable. Logout failed due to network issue';
+      errorMessage =
+          '503 Service Unavailable. Logout failed due to network issue';
       notifyListeners();
       return false;
     }
@@ -82,9 +84,18 @@ class AuthViewModel extends ChangeNotifier {
       case 'user-disabled':
         return 'This account has been disabled.';
       case 'user-not-found':
-        return 'No account found with this email.';
+        // Matches UAT 2.2 documented expected result verbatim.
+        return 'User are not registered';
       case 'wrong-password':
         return 'Incorrect password. Please try again.';
+      case 'invalid-credential':
+        // Newer Firebase projects have Email Enumeration Protection
+        // enabled, which collapses both "no such user" and "wrong
+        // password" into this single generic code so attackers can't
+        // tell which one occurred. We still show the UAT-documented
+        // message since, from the user's perspective, the practical
+        // next step is the same either way.
+        return 'User are not registered';
       default:
         return 'Authentication error: $code';
     }

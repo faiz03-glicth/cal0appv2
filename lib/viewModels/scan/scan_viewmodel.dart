@@ -1,5 +1,3 @@
-// lib/viewModels/scan/scan_viewmodel.dart
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -18,18 +16,6 @@ import 'package:cal0appv2/services/logging/activity_logger.dart';
 import 'package:cal0appv2/models/logging/activity_log.dart';
 import 'package:cal0appv2/models/whey/whey_supplement_model.dart';
 import 'package:cal0appv2/repositories/whey_supplement_repository.dart';
-
-// ── Known "special" ingredient database ──────────────────────────────────────
-//
-// These are ingredients that are noteworthy on a supplement label:
-//   - Amino spiking agents (added cheap amino acids to inflate protein readings)
-//   - Performance compounds that consumers should know about
-//   - Compounds that affect protein quality scoring
-//
-// The rule-based detector finds these from OCR text regardless of AI confidence,
-// which is what the user asked about: "why is my model useless?"
-// Answer: the DistilBERT model classifies the WHOLE label as Authentic/Spiked/Plant-Based.
-// This rule-based system is the layer that explains WHICH ingredients caused that verdict.
 
 class _IngredientRule {
   final String name; // display name
@@ -272,6 +258,18 @@ class ScanViewModel extends ChangeNotifier {
         : 'No suspicious ingredients found ($pct confidence)';
   }
 
+  // ── File format validation ──────────────────────────────────────────────
+  //
+  // ImagePicker's gallery/camera flows normally only surface image files,
+  // but this guard is the explicit, documented check the UAT exercises
+  // (uploading a .pdf or other non-image file). Matches UAT 7.3/8.3.
+  static const _allowedExtensions = ['.jpg', '.jpeg', '.png'];
+
+  bool _hasValidImageExtension(File file) {
+    final path = file.path.toLowerCase();
+    return _allowedExtensions.any((ext) => path.endsWith(ext));
+  }
+
   // ── Scan pipeline ─────────────────────────────────────────────────────────
 
   // ── Multi-angle scan pipeline ─────────────────────────────────────────────
@@ -288,6 +286,20 @@ class ScanViewModel extends ChangeNotifier {
 
   Future<void> scanMultipleImages(List<File> imageFiles) async {
     if (imageFiles.isEmpty) return;
+
+    if (imageFiles.any((f) => !_hasValidImageExtension(f))) {
+      _reset(imageFiles.first);
+      errorMessage = 'Wrong format file';
+      ActivityLogger.instance.log(
+        ActivityEventType.scanFailed,
+        errorCode: 'WRONG_FILE_FORMAT',
+        errorMessage: 'Unsupported file format uploaded',
+      );
+      _setStage(ScanStage.done);
+      isScanning = false;
+      notifyListeners();
+      return;
+    }
 
     // Use first image as the "primary" for the reset (imagePath logging etc.)
     _reset(imageFiles.first);
@@ -363,6 +375,10 @@ class ScanViewModel extends ChangeNotifier {
       lowOcrQuality =
           _assessOcrQuality(mergedLines) < 0.35 &&
           prepResults.every((p) => p.qualityScore < 0.35);
+      if (lowOcrQuality) {
+        // Matches UAT 7.4 documented expected result verbatim.
+        errorMessage = 'Unreadable file, please upload picture with clear';
+      }
 
       ActivityLogger.instance.log(
         ActivityEventType.scanOcrCompleted,
@@ -493,6 +509,20 @@ class ScanViewModel extends ChangeNotifier {
   }
 
   Future<void> scanImage(File imageFile) async {
+    if (!_hasValidImageExtension(imageFile)) {
+      _reset(imageFile);
+      errorMessage = 'Wrong format file';
+      ActivityLogger.instance.log(
+        ActivityEventType.scanFailed,
+        errorCode: 'WRONG_FILE_FORMAT',
+        errorMessage: 'Unsupported file format uploaded',
+      );
+      _setStage(ScanStage.done);
+      isScanning = false;
+      notifyListeners();
+      return;
+    }
+
     _reset(imageFile);
     final sw = Stopwatch()..start();
     ActivityLogger.instance.log(ActivityEventType.scanInitiated);
@@ -525,6 +555,10 @@ class ScanViewModel extends ChangeNotifier {
           : scannedLines.join('\n');
 
       lowOcrQuality = _assessOcrQuality(scannedLines) < 0.35;
+      if (lowOcrQuality) {
+        // Matches UAT 7.4 documented expected result verbatim.
+        errorMessage = 'Unreadable file, please upload picture with clear';
+      }
 
       ActivityLogger.instance.log(
         ActivityEventType.scanOcrCompleted,

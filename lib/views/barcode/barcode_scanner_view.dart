@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/viewModels/scan/barcode_viewmodel.dart';
@@ -117,6 +119,33 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
     }
   }
 
+  // ── Gallery upload (UAT 8.2 / 8.3 / 8.4) ────────────────────────────────
+
+  Future<void> _onUploadPicture() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null || !mounted) return;
+
+    final vm = context.read<BarcodeViewModel>();
+    if (!vm.canScan) return;
+
+    _controller.stop();
+    await vm.onImageUploaded(File(picked.path));
+
+    if (!mounted) return;
+
+    final resultState = vm.state;
+    if (resultState == BarcodeScanState.found ||
+        resultState == BarcodeScanState.notFound) {
+      _sheetOpen = true;
+      await _showResultSheet();
+    } else if (resultState == BarcodeScanState.failed) {
+      // Wrong format / unreadable file — shown via the status banner
+      // (vm.errorMessage), restart the live scanner underneath.
+      _controller.start();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
@@ -129,6 +158,11 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
         foregroundColor: Colors.white,
         title: const Text('Scan Barcode'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.photo_library_outlined),
+            tooltip: 'Upload from gallery',
+            onPressed: _onUploadPicture,
+          ),
           IconButton(
             icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
             onPressed: () {

@@ -75,6 +75,16 @@ class UserViewModel extends ChangeNotifier {
         notifyListeners();
         return;
       }
+      // weight/height arrive here already parsed by the View via
+      // double.tryParse(...) ?? 0 — an invalid format (e.g. "6'2") collapses
+      // to 0 before reaching this method, so 0 is our signal to reject it.
+      // Matches UAT 5.2 (Personalized Setup - Exception Flow).
+      if (weight <= 0 || height <= 0) {
+        errorMessage = 'Wrong format';
+        isLoading = false;
+        notifyListeners();
+        return;
+      }
 
       _user!
         ..userName = userName

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:cal0appv2/models/off_food_result.dart';
 import 'package:cal0appv2/models/foodlog_model.dart';
 import 'package:cal0appv2/repositories/off_food_repository.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
 import 'package:cal0appv2/services/logging/activity_logger.dart';
 import 'package:cal0appv2/models/logging/activity_log.dart';
+import 'dart:io';
 
 enum BarcodeScanState { idle, scanning, found, notFound, failed, saving }
 
@@ -94,6 +96,76 @@ class BarcodeViewModel extends ChangeNotifier {
         _errorMessage = message;
         debugPrint('❌ Barcode lookup error: $message');
         _setState(BarcodeScanState.failed);
+    }
+  }
+
+  // ── Gallery upload (UAT 8.2 / 8.3) ──────────────────────────────────────
+  //
+  // Decodes a barcode from a static image file instead of the live camera,
+  // via mobile_scanner's MobileScannerController.analyzeImage(path).
+  // Supported on Android/iOS only (package limitation).
+
+  static const _allowedImageExtensions = ['.jpg', '.jpeg', '.png'];
+
+  bool _hasValidImageExtension(File file) {
+    final path = file.path.toLowerCase();
+    return _allowedImageExtensions.any((ext) => path.endsWith(ext));
+  }
+
+  Future<void> onImageUploaded(File imageFile) async {
+    if (!canScan) return;
+
+    _errorMessage = null;
+    _successMessage = null;
+
+    // UAT 8.3 — reject non-image files before attempting to decode.
+    if (!_hasValidImageExtension(imageFile)) {
+      _errorMessage = 'Wrong Format File, please re-upload new file';
+      _setState(BarcodeScanState.failed);
+      return;
+    }
+
+    _setState(BarcodeScanState.scanning);
+    ActivityLogger.instance.log(
+      ActivityEventType.scanInitiated,
+      errorMessage: 'barcode_upload=${imageFile.path}',
+    );
+
+    try {
+      final controller = MobileScannerController();
+      final capture = await controller.analyzeImage(imageFile.path);
+      await controller.dispose();
+
+      final rawBarcode = capture?.barcodes.firstOrNull?.rawValue;
+
+      if (rawBarcode == null) {
+        // UAT 8.4 — image decoded but no barcode found, or the file
+        // itself is unreadable/unclear.
+        _errorMessage = 'Unreadable file, please upload picture with clear';
+        _setState(BarcodeScanState.failed);
+        return;
+      }
+
+      _lastBarcode = rawBarcode;
+      final result = await _foodRepo.lookupBarcode(rawBarcode);
+
+      switch (result) {
+        case FoodLookupSuccess(:final food):
+          _foundFood = food;
+          _setState(BarcodeScanState.found);
+
+        case FoodLookupNotFound():
+          _foundFood = null;
+          _setState(BarcodeScanState.notFound);
+
+        case FoodLookupError(:final message):
+          _errorMessage = message;
+          _setState(BarcodeScanState.failed);
+      }
+    } catch (e) {
+      debugPrint('❌ Image barcode analysis error: $e');
+      _errorMessage = 'Unreadable file, please upload picture with clear';
+      _setState(BarcodeScanState.failed);
     }
   }
 

@@ -5,6 +5,8 @@ import '../../repositories/auth_repository.dart';
 class AuthViewModel extends ChangeNotifier {
   final AuthRepository _authRepo;
 
+  // Optional callbacks invoked on sign-out to let other VMs clear themselves.
+  // Registered from main.dart after all providers are ready.
   final List<VoidCallback> _signOutCallbacks = [];
 
   AuthViewModel({AuthRepository? authRepository})
@@ -43,13 +45,28 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> signOut() async {
-    // Clear all dependent VMs before signing out
-    for (final cb in _signOutCallbacks) {
-      cb();
+  /// Signs the user out. Returns true on success.
+  /// On failure (e.g. no network), sets [errorMessage] and returns false —
+  /// matches UAT 3.2 (Unsuccessful Logout, no internet connection).
+  Future<bool> signOut() async {
+    errorMessage = null;
+    try {
+      // Clear all dependent VMs before signing out
+      for (final cb in _signOutCallbacks) {
+        cb();
+      }
+      await _authRepo.signOut();
+      notifyListeners();
+      return true;
+    } on FirebaseAuthException catch (_) {
+      errorMessage = '503 Service Unavailable. Logout failed due to network issue';
+      notifyListeners();
+      return false;
+    } catch (_) {
+      errorMessage = '503 Service Unavailable. Logout failed due to network issue';
+      notifyListeners();
+      return false;
     }
-    await _authRepo.signOut();
-    notifyListeners();
   }
 
   void clearMessages() {
@@ -65,9 +82,7 @@ class AuthViewModel extends ChangeNotifier {
       case 'user-disabled':
         return 'This account has been disabled.';
       case 'user-not-found':
-        // Matches STD TC002_02 (Login with invalid inputs) documented
-        // expected result verbatim.
-        return 'User are not registered';
+        return 'No account found with this email.';
       case 'wrong-password':
         return 'Incorrect password. Please try again.';
       default:

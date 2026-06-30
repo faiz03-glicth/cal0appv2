@@ -38,7 +38,9 @@ class ForgotPasswordViewModel extends ChangeNotifier {
       notifyListeners();
       return false;
     } catch (_) {
-      errorMessage = 'Something went wrong. Please try again.';
+      // Network/server failures land here (Firebase Auth-specific errors
+      // are caught above). Matches UAT 4.2 documented expected result.
+      errorMessage = '503 Service Unavailable';
       isLoading = false;
       notifyListeners();
       return false;

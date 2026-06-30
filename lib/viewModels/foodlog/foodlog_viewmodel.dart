@@ -89,6 +89,11 @@ class FoodLogViewModel extends ChangeNotifier {
     try {
       _foodLogs = await _foodLogRepo.getFoodLogs(uid, _selectedDate);
       _recomputeTotals();
+      // UAT 9.2 — empty result for the selected date is its own
+      // documented case, distinct from a fetch failure.
+      if (_foodLogs.isEmpty) {
+        errorMessage = 'No data to shown';
+      }
     } catch (e) {
       errorMessage = 'Failed to load food logs: $e';
       _foodLogs = [];

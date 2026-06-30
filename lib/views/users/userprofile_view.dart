@@ -402,9 +402,28 @@ class _UserProfileViewState extends State<UserProfileView> {
                                   ),
                                 ),
                                 TextButton(
-                                  onPressed: () {
+                                  onPressed: () async {
                                     Navigator.pop(context);
-                                    context.read<AuthViewModel>().signOut();
+                                    final ok = await context
+                                        .read<AuthViewModel>()
+                                        .signOut();
+                                    if (!ok && context.mounted) {
+                                      final msg = context
+                                          .read<AuthViewModel>()
+                                          .errorMessage;
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            msg ?? 'Logout failed.',
+                                          ),
+                                          backgroundColor: const Color(
+                                            0xFFD67A7A,
+                                          ),
+                                        ),
+                                      );
+                                    }
                                   },
                                   child: const Text(
                                     'Sign Out',

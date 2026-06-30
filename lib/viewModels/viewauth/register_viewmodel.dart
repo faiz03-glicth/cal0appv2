@@ -94,7 +94,8 @@ class RegisterViewModel extends ChangeNotifier {
   String _friendlyAuthError(String code) {
     switch (code) {
       case 'email-already-in-use':
-        return 'An account with this email already exists.';
+        // Matches UAT 1.3 documented expected result verbatim.
+        return 'User already registered';
       case 'invalid-email':
         return 'Invalid email address.';
       case 'weak-password':

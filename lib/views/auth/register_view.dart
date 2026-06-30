@@ -125,7 +125,12 @@ class _RegisterViewState extends State<RegisterView> {
                   hint: 'Enter Email',
                   icon: Icons.email,
                   keyboardType: TextInputType.emailAddress,
-                  validator: (v) => !v!.contains('@') ? 'Invalid email' : null,
+                  // No format validator here on purpose — email format is
+                  // checked by RegisterViewModel.register() instead, so
+                  // invalid input reaches it and produces the combined
+                  // "Invalid Email Format. ... Re-enter correct
+                  // credentials." message (STD TC001_02).
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 AppTextField(
@@ -134,7 +139,10 @@ class _RegisterViewState extends State<RegisterView> {
                   hint: 'Enter Password',
                   icon: Icons.lock,
                   obscure: true,
-                  validator: (v) => v!.length < 6 ? 'Min 6 characters' : null,
+                  // No length validator here on purpose — see email field
+                  // comment above. Length is checked in
+                  // RegisterViewModel.register().
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 AppTextField(
@@ -143,8 +151,10 @@ class _RegisterViewState extends State<RegisterView> {
                   hint: 'Re-enter Password',
                   icon: Icons.lock_outline,
                   obscure: true,
-                  validator: (v) =>
-                      v != _password.text ? 'Passwords do not match' : null,
+                  // No match validator here on purpose — see email field
+                  // comment above. Mismatch is checked in
+                  // RegisterViewModel.register().
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
                 const AppSectionTitle(title: 'Body Info'),
                 Row(

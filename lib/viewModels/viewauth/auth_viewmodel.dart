@@ -5,8 +5,6 @@ import '../../repositories/auth_repository.dart';
 class AuthViewModel extends ChangeNotifier {
   final AuthRepository _authRepo;
 
-  // Optional callbacks invoked on sign-out to let other VMs clear themselves.
-  // Registered from main.dart after all providers are ready.
   final List<VoidCallback> _signOutCallbacks = [];
 
   AuthViewModel({AuthRepository? authRepository})
@@ -67,7 +65,9 @@ class AuthViewModel extends ChangeNotifier {
       case 'user-disabled':
         return 'This account has been disabled.';
       case 'user-not-found':
-        return 'No account found with this email.';
+        // Matches STD TC002_02 (Login with invalid inputs) documented
+        // expected result verbatim.
+        return 'User are not registered';
       case 'wrong-password':
         return 'Incorrect password. Please try again.';
       default:

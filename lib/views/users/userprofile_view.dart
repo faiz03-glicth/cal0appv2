@@ -14,6 +14,7 @@ import 'package:cal0appv2/views/widgets/app_message_banner.dart';
 import 'package:cal0appv2/views/widgets/app_section_title.dart';
 import 'package:cal0appv2/views/widgets/app_card.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
+import 'package:cal0appv2/views/users/report_submission_view.dart';
 
 class UserProfileView extends StatefulWidget {
   const UserProfileView({super.key});
@@ -111,7 +112,19 @@ class _UserProfileViewState extends State<UserProfileView> {
     final c = C0Theme.of(context);
 
     return Scaffold(
-      appBar: C0AppBar(title: 'My Profile'),
+      appBar: C0AppBar(
+        title: 'My Profile',
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.flag_outlined),
+            tooltip: 'Report a problem',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ReportSubmissionView()),
+            ),
+          ),
+        ],
+      ),
       backgroundColor: c.background,
       body: vm.isLoading
           ? Center(child: CircularProgressIndicator(color: c.primary))

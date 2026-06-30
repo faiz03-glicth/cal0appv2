@@ -17,6 +17,7 @@ import 'package:cal0appv2/viewModels/dashboard/dashboard_viewmodel.dart';
 import 'package:cal0appv2/viewModels/viewauth/register_viewmodel.dart';
 import 'package:cal0appv2/viewModels/foodlog/food_history_viewmodel.dart';
 import 'package:cal0appv2/viewModels/health/health_warning_viewmodel.dart';
+import 'package:cal0appv2/viewModels/usermodel/report_viewmodel.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -86,8 +87,8 @@ class _AppRootState extends State<_AppRoot> {
         ChangeNotifierProvider(create: (_) => ThemeViewModel()),
         ChangeNotifierProvider(create: (_) => ScanViewModel()),
         ChangeNotifierProvider(create: (_) => FoodHistoryViewModel()),
-        // BarcodeViewModel registered here so it's available app-wide
         ChangeNotifierProvider(create: (_) => BarcodeViewModel()),
+        ChangeNotifierProvider(create: (_) => ReportViewModel()),
       ],
       child: Consumer<ThemeViewModel>(
         builder: (context, themeVm, _) => MaterialApp(

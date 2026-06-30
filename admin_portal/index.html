@@ -10,7 +10,7 @@
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-  import { getFirestore, collection, query, orderBy, limit, getDocs, getDoc, doc, where, collectionGroup } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getFirestore, collection, query, orderBy, limit, getDocs, getDoc, doc, where, collectionGroup, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
   const firebaseConfig = {
     apiKey:            "AIzaSyArE_tLWYW52xnTg0nGrUB8Kb2OVjDr46o",
@@ -31,6 +31,12 @@
   // If the index doesn't exist yet, we show a button to create it.
   const INDEX_LINKS = {
     eventsTimestamp: 'https://console.firebase.google.com/v1/r/project/cal0app/firestore/indexes?create_composite=Ck1wcm9qZWN0cy9jYWwwYXBwL2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy9ldmVudHMvZmllbGRzL3RpbWVzdGFtcBACGg',
+    // No composite index needed yet for `reports` — it's a single-field
+    // orderBy on a top-level collection. Left here as a placeholder in case
+    // a `where` clause (e.g. status filtering) is added later and Firestore
+    // requests a composite index; the same isIndexError()/indexErrorHtml()
+    // helpers below will surface the real URL automatically either way.
+    reportsTimestamp: '',
   };
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -97,7 +103,7 @@
         window._adminEmail = user.email;
         document.getElementById('admin-email').textContent = user.email;
         window.firebaseDB = db;
-        window.firebaseSDK = { collection, query, orderBy, limit, getDocs, getDoc, doc, where, collectionGroup };
+        window.firebaseSDK = { collection, query, orderBy, limit, getDocs, getDoc, doc, where, collectionGroup, updateDoc, deleteDoc };
         await window.loadPage('overview');
       } else {
         showError('Access denied. Admin privilege required.');
@@ -142,6 +148,8 @@
       switch(page) {
         case 'overview': content.innerHTML = await renderOverview(); break;
         case 'users':    content.innerHTML = await renderUsers(); break;
+        case 'reports':  content.innerHTML = await renderReports(); break;
+        case 'manage':   content.innerHTML = await renderManage(); break;
         case 'scans':    content.innerHTML = await renderScans(); break;
         case 'logs':     content.innerHTML = await renderLogs(); break;
         case 'errors':   content.innerHTML = await renderErrors(); break;
@@ -366,6 +374,184 @@
       </div>
     </div>`;
   }
+
+  // ── USER REPORTS (UC012 — Admin: View User Report) ─────────────────────
+  //
+  // SCAFFOLD: reads from a top-level `reports` collection written by
+  // ReportRepository.submitReport() (lib/repositories/report_repository.dart).
+  // Matches STD TC012_01 (display list of all user reports) and TC012_02
+  // (show "No user reports available at this time." when empty).
+
+  async function renderReports() {
+    const { collection, query, orderBy, limit, getDocs } = window.firebaseSDK;
+
+    let reports = [];
+    try {
+      const snap = await getDocs(
+        query(collection(db, 'reports'), orderBy('timestamp', 'desc'), limit(200))
+      );
+      reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch(e) {
+      if (isIndexError(e)) throw { isIndexError: true, html: indexErrorHtml(e, 'User Reports') };
+      throw e;
+    }
+
+    // TC012_02: no report data in the database — show the documented alert
+    // instead of an empty table.
+    if (reports.length === 0) {
+      return `
+      <div class="panel animate-in" style="--d:0ms">
+        <div class="panel-header">
+          <span class="panel-title">User Reports</span>
+          <span class="panel-sub readonly-badge">🔒 Read-only</span>
+        </div>
+        <div class="empty-state" style="padding:32px">No user reports available at this time.</div>
+      </div>`;
+    }
+
+    return `
+    <div class="toolbar animate-in" style="--d:0ms">
+      <input class="search-input" id="report-search" placeholder="Filter by UID or report ID…" oninput="filterTable('report-table', this.value)">
+      <span class="toolbar-count">${reports.length} reports</span>
+    </div>
+    <div class="panel animate-in" style="--d:60ms">
+      <div class="panel-header">
+        <span class="panel-title">User Reports</span>
+        <span class="panel-sub readonly-badge">🔒 Read-only</span>
+      </div>
+      <div class="table-wrap">
+        <table id="report-table">
+          <thead><tr>
+            <th>Submitted</th><th>Report ID</th><th>UID</th><th>Details</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${reports.map(r => `
+              <tr data-search="${r.reportId||r.id||''} ${r.userId||''}">
+                <td class="mono">${formatTime(r.timestamp)}</td>
+                <td class="mono uid-cell">${(r.reportId||r.id||'').substring(0,8)}…</td>
+                <td><span class="uid-link mono" onclick="window.viewUserLogs('${r.userId||''}')">${(r.userId||'').substring(0,8)}…</span></td>
+                <td class="muted">${(r.reportDetails||'—').substring(0,80)}${(r.reportDetails||'').length>80?'…':''}</td>
+                <td><button class="row-btn" onclick="window.manageUserFromReport('${r.userId||''}')">Manage user</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // ── MANAGE USER (UC013 — Admin: Manage User) ────────────────────────────
+  //
+  // SCAFFOLD: the only page in this portal that writes to Firestore.
+  // Everywhere else is intentionally read-only telemetry (see the
+  // "🔒 Read-only · cannot modify user data" badge in the topbar) — this
+  // page exists specifically to cover UC013 / TC013_01-03 from the STD
+  // (edit user info, delete user info, exception flow on failure), so it
+  // carries its own "write access" badge instead of the read-only one.
+
+  let _manageUsersCache = [];
+
+  async function renderManage() {
+    const { collection, getDocs } = window.firebaseSDK;
+
+    const usersSnap = await getDocs(collection(db, 'users'));
+    _manageUsersCache = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    return `
+    <div class="toolbar animate-in" style="--d:0ms">
+      <input class="search-input" id="manage-search" placeholder="Filter by UID or name…" oninput="filterTable('manage-table', this.value)">
+      <span class="toolbar-count">${_manageUsersCache.length} users</span>
+    </div>
+    <div class="index-banner" style="border-color: rgba(240,75,75,0.3); background: var(--red-bg); color: var(--red)">
+      <span>Write access &mdash; edits and deletes here modify live Firestore user documents.</span>
+    </div>
+    <div class="panel animate-in" style="--d:60ms">
+      <div class="panel-header">
+        <span class="panel-title">Manage User</span>
+        <span class="panel-sub write-badge">Write access</span>
+      </div>
+      <div class="table-wrap">
+        <table id="manage-table">
+          <thead><tr>
+            <th>UID</th><th>Name</th><th>Email</th><th>Goal</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${_manageUsersCache.map(u => `
+              <tr data-search="${u.userId||u.id||''} ${u.userName||''} ${u.userEmail||''}" id="manage-row-${u.id}">
+                <td class="mono uid-cell">${(u.userId||u.id||'').substring(0,8)}…</td>
+                <td class="name-cell">
+                  <input class="login-field" style="margin:0;padding:6px 10px;font-size:11px" id="edit-name-${u.id}" value="${u.userName||''}">
+                </td>
+                <td>
+                  <input class="login-field" style="margin:0;padding:6px 10px;font-size:11px" id="edit-email-${u.id}" value="${u.userEmail||''}">
+                </td>
+                <td><span class="goal-pill">${u.goal || '—'}</span></td>
+                <td style="white-space:nowrap">
+                  <button class="row-btn" onclick="window.confirmEditUser('${u.id}')">Save</button>
+                  <button class="row-btn danger-btn" onclick="window.confirmDeleteUser('${u.id}')">Delete</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // TC013_01 - edit flow: confirm, write, success/error alert.
+  window.confirmEditUser = async (uid) => {
+    const { doc, updateDoc } = window.firebaseSDK;
+    const newName = document.getElementById(`edit-name-${uid}`)?.value ?? '';
+    const newEmail = document.getElementById(`edit-email-${uid}`)?.value ?? '';
+
+    if (!confirm('Are you sure you want to edit this User Information?')) return;
+
+    try {
+      await updateDoc(doc(db, 'users', uid), {
+        userName: newName,
+        userEmail: newEmail,
+      });
+      alert('Success edit User info');
+      window.loadPage('manage');
+    } catch (e) {
+      // TC013_03 exception flow
+      alert(`System displays an error message: ${e.message || e}`);
+    }
+  };
+
+  // TC013_02 - delete flow: confirm, write, success/error alert.
+  window.confirmDeleteUser = async (uid) => {
+    const { doc, deleteDoc } = window.firebaseSDK;
+
+    if (!confirm('Are you sure you want to delete this User Information?')) return;
+
+    try {
+      await deleteDoc(doc(db, 'users', uid));
+      alert('Success delete User info');
+      window.loadPage('manage');
+    } catch (e) {
+      // TC013_03 exception flow
+      alert(`System displays an error message: ${e.message || e}`);
+    }
+  };
+
+  // Cross-link from the Reports page to Manage User for a specific UID.
+  window.manageUserFromReport = (uid) => {
+    setActivePage('manage');
+    const content = document.getElementById('page-content');
+    content.innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+    renderManage().then(html => {
+      content.innerHTML = html;
+      bindInteractions('manage');
+      if (uid) {
+        const row = document.getElementById(`manage-row-${uid}`);
+        if (row) {
+          row.scrollIntoView({ block: 'center' });
+          row.style.background = 'rgba(75,158,245,0.08)';
+        }
+      }
+    }).catch(e => {
+      content.innerHTML = e.isIndexError ? e.html : `<div class="error-state">${e.message}</div>`;
+    });
+  };
 
   // ── SCANS ──────────────────────────────────────────────────────────────
 
@@ -884,6 +1070,9 @@ tr:hover td { background: rgba(255,255,255,0.015); }
 .toolbar-count { font-size: 11px; color: var(--muted); margin-left: auto; }
 .row-btn { background: var(--blue-bg); border: 1px solid rgba(75,158,245,0.2); border-radius: 4px; color: var(--blue); font-size: 10px; font-family: var(--font-mono); padding: 3px 8px; cursor: pointer; }
 .row-btn:hover { background: rgba(75,158,245,0.2); }
+.danger-btn { background: var(--red-bg) !important; border-color: rgba(240,75,75,0.2) !important; color: var(--red) !important; margin-left: 4px; }
+.danger-btn:hover { background: rgba(240,75,75,0.2) !important; }
+.write-badge { font-size: 10px; color: var(--red); background: var(--red-bg); border: 1px solid rgba(240,75,75,0.2); border-radius: 4px; padding: 2px 7px; }
 
 /* ── Scan detail ────────────────────────────────────────────────── */
 .scan-detail { background: var(--bg2); padding: 16px; display: flex; flex-direction: column; gap: 14px; font-size: 11px; }
@@ -955,6 +1144,9 @@ tr:hover td { background: rgba(255,255,255,0.015); }
       <div class="nav-section">Overview</div>
       <div class="nav-item" id="nav-overview" onclick="window.loadPage('overview')"><div class="nav-dot"></div>Dashboard</div>
       <div class="nav-item" id="nav-users"    onclick="window.loadPage('users')"><div class="nav-dot"></div>Users</div>
+      <div class="nav-item" id="nav-reports"  onclick="window.loadPage('reports')"><div class="nav-dot"></div>User Reports</div>
+      <div class="nav-section">Administration</div>
+      <div class="nav-item" id="nav-manage"   onclick="window.loadPage('manage')"><div class="nav-dot"></div>Manage User</div>
       <div class="nav-section">Monitoring</div>
       <div class="nav-item" id="nav-scans"    onclick="window.loadPage('scans')"><div class="nav-dot"></div>Scan Inspector</div>
       <div class="nav-item" id="nav-logs"     onclick="window.loadPage('logs')"><div class="nav-dot"></div>Activity Feed</div>
@@ -977,7 +1169,7 @@ tr:hover td { background: rgba(255,255,255,0.015); }
       <div class="topbar-sep"></div>
       <span class="topbar-crumb" id="topbar-crumb">C0Admin / Overview</span>
       <div class="topbar-right">
-        <span class="readonly-badge">🔒 Read-only · cannot modify user data</span>
+        <span class="readonly-badge" id="topbar-mode-badge">🔒 Read-only · cannot modify user data</span>
       </div>
     </div>
     <div id="page-content"></div>
@@ -988,6 +1180,8 @@ tr:hover td { background: rgba(255,255,255,0.015); }
 const PAGE_META = {
   overview: { title:'Overview Dashboard',   crumb:'C0Admin / Overview' },
   users:    { title:'User Management',      crumb:'C0Admin / Users' },
+  reports:  { title:'User Reports',         crumb:'C0Admin / Reports' },
+  manage:   { title:'Manage User',          crumb:'C0Admin / Manage User' },
   scans:    { title:'Scan Debug Inspector', crumb:'C0Admin / Scan Inspector' },
   logs:     { title:'Live Activity Feed',   crumb:'C0Admin / Activity' },
   errors:   { title:'Error Monitor',        crumb:'C0Admin / Errors' },
@@ -1001,6 +1195,19 @@ function setActivePage(page) {
   const meta = PAGE_META[page] || {};
   document.getElementById('topbar-title').textContent = meta.title || '';
   document.getElementById('topbar-crumb').textContent = meta.crumb || '';
+
+  const badge = document.getElementById('topbar-mode-badge');
+  if (badge) {
+    if (page === 'manage') {
+      badge.textContent = '✎ Write access · this page can edit/delete user data';
+      badge.classList.add('write-badge');
+      badge.classList.remove('readonly-badge');
+    } else {
+      badge.textContent = '🔒 Read-only · cannot modify user data';
+      badge.classList.add('readonly-badge');
+      badge.classList.remove('write-badge');
+    }
+  }
 }
 
 function filterTable(tableId, query) {

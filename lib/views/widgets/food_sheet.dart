@@ -63,7 +63,6 @@ class _FoodSheetState extends State<FoodSheet> {
   @override
   void dispose() {
     _foodLogVm.cancelSearch();
-
     _searchCtrl.dispose();
     _nameCtrl.dispose();
     _calCtrl.dispose();
@@ -319,7 +318,6 @@ class _SearchSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Search input
         TextField(
           controller: searchCtrl,
           onChanged: vm.searchFood,
@@ -357,7 +355,6 @@ class _SearchSection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
 
-        // Loading indicator
         if (vm.isSearching)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
@@ -381,13 +378,11 @@ class _SearchSection extends StatelessWidget {
             ),
           ),
 
-        // Empty state
         if (!vm.isSearching &&
             vm.searchResults.isEmpty &&
             searchCtrl.text.length > 2)
           _SearchEmptyState(query: searchCtrl.text),
 
-        // Results list
         if (!vm.isSearching && vm.searchResults.isNotEmpty) ...[
           Text(
             '${vm.searchResults.length} results',
@@ -463,7 +458,6 @@ class _FoodResultCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Product image or placeholder icon
             ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.sm),
               child: food.imageUrl != null
@@ -482,7 +476,6 @@ class _FoodResultCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Name + grade badge row
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -503,7 +496,6 @@ class _FoodResultCard extends StatelessWidget {
                       ],
                     ],
                   ),
-                  // Brand
                   if (food.hasBrand) ...[
                     const SizedBox(height: 2),
                     Text(
@@ -516,7 +508,6 @@ class _FoodResultCard extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: AppSpacing.xs),
-                  // Macro chips — Wrap prevents overflow
                   Wrap(
                     spacing: 4,
                     runSpacing: 4,
@@ -652,7 +643,13 @@ class _IncompleteBadge extends StatelessWidget {
   );
 }
 
-// ── Manual form ────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Manual form — redesigned to match food_detail_view edit sheet style:
+//   • No icons in any AppTextField
+//   • label: above every field
+//   • unit in hint: (g / kcal / mg)
+//   • macros in two-column pairs, not a cramped three-column row
+// ══════════════════════════════════════════════════════════════════════════════
 
 class _ManualForm extends StatelessWidget {
   final FoodLogViewModel vm;
@@ -681,24 +678,61 @@ class _ManualForm extends StatelessWidget {
     required this.onSave,
   });
 
+  /// Side-by-side pair of labeled, icon-free fields
+  Widget _row2(
+    TextEditingController c1,
+    String l1,
+    String h1,
+    TextEditingController c2,
+    String l2,
+    String h2,
+    FoodLogViewModel vm_, {
+    void Function(String)? on1,
+    void Function(String)? on2,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: AppTextField(
+            controller: c1,
+            label: l1,
+            hint: h1,
+            isNumber: true,
+            onChanged: on1,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: AppTextField(
+            controller: c2,
+            label: l2,
+            hint: h2,
+            isNumber: true,
+            onChanged: on2,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
 
     HealthWarningViewModel? healthVm;
     try {
-      healthVm = context
-          .read<HealthWarningViewModel>(); // was .watch — caused extra rebuilds
+      healthVm = context.read<HealthWarningViewModel>();
     } catch (_) {}
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Product banner if selected from search
+        // ── Product banner (when selected from search) ──────────────
         if (selectedFood != null)
           _SelectedFoodBanner(food: selectedFood!, c: c),
         if (selectedFood != null) const SizedBox(height: AppSpacing.md),
 
+        // ── Serving size (only shown for search-selected foods) ──────
         if (selectedFood != null && selectedFood!.hasNutrition) ...[
           Row(
             children: [
@@ -707,7 +741,6 @@ class _ManualForm extends StatelessWidget {
                   controller: servingCtrl,
                   label: 'Serving Size',
                   hint: 'e.g. 100',
-                  icon: Icons.straighten,
                   isNumber: true,
                   onChanged: (v) {
                     final g = double.tryParse(v);
@@ -716,9 +749,8 @@ class _ManualForm extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              // Unit label box
               Padding(
-                padding: const EdgeInsets.only(top: 22), // align with field
+                padding: const EdgeInsets.only(top: 22),
                 child: Container(
                   height: 52,
                   padding: const EdgeInsets.symmetric(
@@ -746,7 +778,9 @@ class _ManualForm extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.xs),
             child: Text(
-              'Default serving: ${selectedFood!.servingSize.toStringAsFixed(0)} ${selectedFood!.servingUnit.isNotEmpty ? selectedFood!.servingUnit : 'g'} — nutrition values scale automatically',
+              'Default serving: ${selectedFood!.servingSize.toStringAsFixed(0)} '
+              '${selectedFood!.servingUnit.isNotEmpty ? selectedFood!.servingUnit : 'g'}'
+              ' — nutrition values scale automatically',
               style: AppTextStyles.micro.copyWith(
                 color: c.textSecondary,
                 height: 1.4,
@@ -756,63 +790,56 @@ class _ManualForm extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
         ],
 
-        // Core fields
+        // ── Food name ────────────────────────────────────────────────
         AppTextField(
           controller: nameCtrl,
-          hint: 'Food name',
-          icon: Icons.fastfood,
+          label: 'Food Name',
+          hint: 'e.g. Chicken Rice',
           onChanged: vm.updateFoodName,
         ),
         const SizedBox(height: AppSpacing.md),
+
+        // ── Calories ─────────────────────────────────────────────────
         AppTextField(
           controller: calCtrl,
-          hint: 'Calories (kcal)',
-          icon: Icons.local_fire_department,
+          label: 'Calories',
+          hint: 'kcal',
           isNumber: true,
           onChanged: vm.updateCalories,
         ),
-        const SizedBox(height: AppSpacing.xs),
+        const SizedBox(height: AppSpacing.md),
 
+        // ── Macros section header ────────────────────────────────────
         Text(
           'Macros (optional)',
           style: AppTextStyles.fieldLabel.copyWith(color: c.textSecondary),
         ),
         const SizedBox(height: AppSpacing.sm),
-        Row(
-          children: [
-            Expanded(
-              child: AppTextField(
-                controller: proteinCtrl,
-                hint: 'Protein g',
-                icon: Icons.fitness_center,
-                isNumber: true,
-                onChanged: vm.updateProtein,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: AppTextField(
-                controller: carbsCtrl,
-                hint: 'Carbs g',
-                icon: Icons.grain,
-                isNumber: true,
-                onChanged: vm.updateCarbs,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: AppTextField(
-                controller: fatCtrl,
-                hint: 'Fat g',
-                icon: Icons.water_drop,
-                isNumber: true,
-                onChanged: vm.updateFat,
-              ),
-            ),
-          ],
+
+        // ── Protein + Carbs ──────────────────────────────────────────
+        _row2(
+          proteinCtrl,
+          'Protein',
+          'g',
+          carbsCtrl,
+          'Carbs',
+          'g',
+          vm,
+          on1: vm.updateProtein,
+          on2: vm.updateCarbs,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+
+        // ── Fat (full-width so it doesn't feel squished alone) ────────
+        AppTextField(
+          controller: fatCtrl,
+          label: 'Fat',
+          hint: 'g',
+          isNumber: true,
+          onChanged: vm.updateFat,
         ),
 
-        // Incomplete data warning
+        // ── Incomplete data warning ───────────────────────────────────
         if (selectedFood != null && selectedFood!.isIncomplete) ...[
           const SizedBox(height: AppSpacing.md),
           Container(
@@ -847,7 +874,7 @@ class _ManualForm extends StatelessWidget {
           ),
         ],
 
-        // Health conditions active badge
+        // ── Health check badge ────────────────────────────────────────
         if (healthVm != null && healthVm.hasConditions) ...[
           const SizedBox(height: AppSpacing.md),
           Container(

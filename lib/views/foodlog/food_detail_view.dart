@@ -1,232 +1,204 @@
 import 'dart:io';
-import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:cal0appv2/views/theme/app_theme.dart';
-import 'package:cal0appv2/models/foodlog_model.dart';
-import 'package:cal0appv2/viewModels/foodlog/food_history_viewmodel.dart';
-import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
-import 'package:cal0appv2/views/widgets/app_card.dart';
-import 'package:cal0appv2/views/widgets/app_text_field.dart';
-import 'package:cal0appv2/views/widgets/app_primary_button.dart';
-import 'package:cal0appv2/views/widgets/app_bottom_sheet.dart';
-import 'package:cal0appv2/views/widgets/macro_progress_bar.dart';
-import 'package:cal0appv2/views/widgets/source_badge.dart';
+import 'package:cal0appv2/viewModels/scan/scan_viewmodel.dart';
+import 'package:cal0appv2/views/widgets/scan_confirm_sheet.dart';
+import 'package:cal0appv2/models/scan_result_model.dart';
 
-class FoodDetailView extends StatefulWidget {
-  final FoodLogModel log;
-  const FoodDetailView({super.key, required this.log});
+// ── Angle slot definition ─────────────────────────────────────────────────
 
-  @override
-  State<FoodDetailView> createState() => _FoodDetailViewState();
+class _AngleSlot {
+  final String id;
+  final String label;
+  final String hint;
+  final IconData icon;
+  final bool required;
+  File? image;
+
+  _AngleSlot({
+    required this.id,
+    required this.label,
+    required this.hint,
+    required this.icon,
+    this.required = true,
+    this.image,
+  });
+
+  bool get captured => image != null;
 }
 
-class _FoodDetailViewState extends State<FoodDetailView> {
-  late FoodLogModel _log;
+// ── Screen ────────────────────────────────────────────────────────────────
+
+class MultiAngleCaptureScreen extends StatefulWidget {
+  final BuildContext scaffoldContext;
+  const MultiAngleCaptureScreen({super.key, required this.scaffoldContext});
+
+  @override
+  State<MultiAngleCaptureScreen> createState() =>
+      _MultiAngleCaptureScreenState();
+}
+
+class _MultiAngleCaptureScreenState extends State<MultiAngleCaptureScreen>
+    with SingleTickerProviderStateMixin {
+  final _picker = ImagePicker();
+  bool _showInstructions = true;
+  bool _isAnalysing = false;
+
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulse;
+
+  late final List<_AngleSlot> _slots = [
+    _AngleSlot(
+      id: 'front',
+      label: 'Front Panel',
+      hint: 'Brand name, product type, weight',
+      icon: Icons.crop_portrait,
+      required: true,
+    ),
+    _AngleSlot(
+      id: 'nutrition',
+      label: 'Nutrition Facts',
+      hint: 'Calories, protein, carbs, fat, sugar…',
+      icon: Icons.table_chart_outlined,
+      required: true,
+    ),
+    _AngleSlot(
+      id: 'ingredients',
+      label: 'Ingredients List',
+      hint: 'Full ingredient text (may wrap to another side)',
+      icon: Icons.list_alt_rounded,
+      required: true,
+    ),
+    _AngleSlot(
+      id: 'side',
+      label: 'Side Panel',
+      hint: 'Extra nutrition info or continued ingredients',
+      icon: Icons.view_sidebar_outlined,
+      required: false,
+    ),
+    _AngleSlot(
+      id: 'closeup',
+      label: 'Close-up',
+      hint: 'Any fine print or blurry area you want re-scanned',
+      icon: Icons.zoom_in,
+      required: false,
+    ),
+  ];
+
+  int get _capturedRequired =>
+      _slots.where((s) => s.required && s.captured).length;
+  int get _totalRequired => _slots.where((s) => s.required).length;
+  bool get _canAnalyse => _capturedRequired >= _totalRequired;
+  List<File> get _capturedFiles =>
+      _slots.where((s) => s.captured).map((s) => s.image!).toList();
 
   @override
   void initState() {
     super.initState();
-    _log = widget.log;
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(
+      begin: 0.96,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
   }
 
   @override
-  Widget build(BuildContext context) {
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  // ── Capture: camera or gallery chooser ─────────────────────────────────
+
+  Future<void> _captureSlot(_AngleSlot slot) async {
+    final source = await _chooseImageSource();
+    if (source == null) return;
+
+    final picked = await _picker.pickImage(source: source, imageQuality: 92);
+    if (picked == null) return;
+
+    final file = File(picked.path);
+
+    // ── Blur / clarity check ──────────────────────────────────────────────
+    // We use the file size as a lightweight proxy: very small files (< 30 KB)
+    // are almost always blurred, solid-colour, or empty captures.
+    // A proper Laplacian-variance check would need native code; this covers
+    // the common "thumb over lens" and "foggy glass" cases cheaply.
+    final sizeKb = await file.length() / 1024;
+    if (sizeKb < 30) {
+      if (mounted) {
+        _showUnreadableDialog();
+      }
+      return;
+    }
+
+    setState(() => slot.image = file);
+  }
+
+  /// Bottom sheet: Camera or Gallery
+  Future<ImageSource?> _chooseImageSource() async {
     final c = C0Theme.of(context);
-    final isSpiked = _log.scanAnalysisResult?.contains('SPIKED') ?? false;
-
-    return Scaffold(
-      backgroundColor: c.background,
-      appBar: AppBar(
-        backgroundColor: c.header,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          _log.foodLogName,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-          overflow: TextOverflow.ellipsis,
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: c.card,
+          borderRadius: BorderRadius.circular(AppRadius.xl),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.edit,
-              color: Colors.white,
-              size: AppSizes.fieldIconSize,
-            ),
-            onPressed: () => _openEdit(context),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Scanned image
-            if (_log.isScanned &&
-                _log.imagePath != null &&
-                _log.imagePath!.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.xl),
-                child: Image.file(
-                  File(_log.imagePath!),
-                  width: double.infinity,
-                  height: 200,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                ),
-              ),
-            if (_log.isScanned && _log.imagePath != null)
-              const SizedBox(height: AppSpacing.lg),
-
-            // Source + date card
-            AppCard(
-              child: Column(
-                children: [
-                  _InfoRow(
-                    label: 'Source',
-                    value: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [SourceBadge(source: _log.source)],
-                    ),
-                  ),
-                  _InfoRow(
-                    label: 'Date',
-                    value: Text(
-                      DateFormat('d MMM yyyy, h:mm a').format(_log.loggedAt),
-                      style: AppTextStyles.caption.copyWith(
-                        color: c.textPrimary,
-                      ),
-                    ),
-                  ),
-                  if (_log.servingSize != null)
-                    _InfoRow(
-                      label: 'Serving',
-                      value: Text(
-                        '${_log.servingSize}${_log.servingUnit}',
-                        style: AppTextStyles.caption.copyWith(
-                          color: c.textPrimary,
-                        ),
-                      ),
-                    ),
-                  if (_log.isScanned && _log.scanConfidence != null)
-                    _InfoRow(
-                      label: 'OCR Confidence',
-                      value: Text(
-                        '${(_log.scanConfidence! * 100).toStringAsFixed(0)}%',
-                        style: AppTextStyles.caption.copyWith(
-                          color: c.textPrimary,
-                        ),
-                      ),
-                    ),
-                ],
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: c.textSecondary.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-
-            // AI result (scanned only)
-            if (_log.isScanned && _log.scanAnalysisResult != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.lg - 2),
-                decoration: BoxDecoration(
-                  color: (isSpiked ? c.warning : c.success).withValues(
-                    alpha: 0.1,
-                  ),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(
-                    color: (isSpiked ? c.warning : c.success).withValues(
-                      alpha: 0.4,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      isSpiked ? Icons.warning_rounded : Icons.shield,
-                      color: isSpiked ? c.warning : c.success,
-                    ),
-                    const SizedBox(width: AppSpacing.sm + 2),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'AI Analysis',
-                          style: AppTextStyles.tiny.copyWith(
-                            color: c.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Text(
-                          _log.scanAnalysisResult!,
-                          style: AppTextStyles.bodyCompact.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: isSpiked ? c.warning : c.success,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            if (_log.isScanned) const SizedBox(height: AppSpacing.md),
-
-            // Macros card
             Text(
-              'NUTRITION',
-              style: AppTextStyles.sectionTitle.copyWith(
-                color: c.textSecondary,
+              'Add Image',
+              style: AppTextStyles.title.copyWith(
+                color: c.textPrimary,
+                fontSize: 16,
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            AppCard(
-              child: Column(
-                children: [
-                  MacroProgressBar(
-                    label: 'Calories',
-                    value: _log.calorieIntake.toDouble(),
-                    max: 2000,
-                    unit: 'kcal',
-                    color: c.primary,
-                  ),
-                  MacroProgressBar(
-                    label: 'Protein',
-                    value: _log.protein,
-                    max: 150,
-                    color: c.success,
-                  ),
-                  MacroProgressBar(
-                    label: 'Carbohydrates',
-                    value: _log.carbs,
-                    max: 250,
-                    color: C0Theme.macroCarbs,
-                  ),
-                  MacroProgressBar(
-                    label: 'Fat',
-                    value: _log.fats,
-                    max: 65,
-                    color: c.slate,
-                  ),
-                  if (_log.sugar > 0)
-                    MacroProgressBar(
-                      label: 'Sugar',
-                      value: _log.sugar,
-                      max: 50,
-                      color: C0Theme.macroSugar,
-                    ),
-                  if (_log.sodium > 0)
-                    MacroProgressBar(
-                      label: 'Sodium',
-                      value: _log.sodium,
-                      max: 2300,
-                      unit: 'mg',
-                      color: C0Theme.macroSodium,
-                    ),
-                ],
+            ListTile(
+              leading: Icon(Icons.camera_alt_outlined, color: c.primary),
+              title: Text(
+                'Take Photo',
+                style: AppTextStyles.body.copyWith(color: c.textPrimary),
               ),
+              subtitle: Text(
+                'Use the camera now',
+                style: AppTextStyles.caption.copyWith(color: c.textSecondary),
+              ),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_library_outlined, color: c.primary),
+              title: Text(
+                'Choose from Gallery',
+                style: AppTextStyles.body.copyWith(color: c.textPrimary),
+              ),
+              subtitle: Text(
+                'Pick an existing photo',
+                style: AppTextStyles.caption.copyWith(color: c.textSecondary),
+              ),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            SizedBox(
+              height: AppSpacing.md + MediaQuery.of(context).padding.bottom,
             ),
           ],
         ),
@@ -234,75 +206,308 @@ class _FoodDetailViewState extends State<FoodDetailView> {
     );
   }
 
-  void _openEdit(BuildContext context) {
+  /// Shows the "Unreadable image" error dialog asking the user to re-upload.
+  void _showUnreadableDialog() {
     final c = C0Theme.of(context);
-    final nameCtrl = TextEditingController(text: _log.foodLogName);
-    final calCtrl = TextEditingController(text: '${_log.calorieIntake}');
-    final proCtrl = TextEditingController(text: '${_log.protein}');
-    final carbCtrl = TextEditingController(text: '${_log.carbs}');
-    final fatCtrl = TextEditingController(text: '${_log.fats}');
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+        ),
+        icon: Icon(
+          Icons.image_not_supported_outlined,
+          color: c.warning,
+          size: 40,
+        ),
+        title: Text(
+          'Unreadable Image',
+          style: AppTextStyles.title.copyWith(
+            color: c.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        content: Text(
+          'Unreadable file, please upload picture with clear image of the label.',
+          style: AppTextStyles.body.copyWith(
+            color: c.textSecondary,
+            height: 1.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              elevation: 0,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              // Re-open slot chooser — user picks a clearer image
+            },
+            child: const Text('Try Again'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Analyse pipeline ────────────────────────────────────────────────────
+
+  Future<void> _analyse() async {
+    if (!_canAnalyse || _isAnalysing) return;
+    setState(() => _isAnalysing = true);
+
+    final vm = context.read<ScanViewModel>();
+    final files = _capturedFiles;
+
+    if (mounted) Navigator.of(context).pop();
+
+    await vm.scanMultipleImages(files);
+
+    final sc = widget.scaffoldContext;
+    if (!sc.mounted) return;
+
+    if (vm.errorMessage != null && vm.scannedText == null) {
+      ScaffoldMessenger.of(sc).showSnackBar(
+        SnackBar(content: Text(vm.errorMessage!), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    // Low-quality OCR → show unreadable error over the scaffold
+    if (vm.lowOcrQuality) {
+      showDialog(
+        context: sc,
+        builder: (_) {
+          final c = C0Theme.of(sc);
+          return AlertDialog(
+            backgroundColor: c.card,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.xl),
+            ),
+            icon: Icon(
+              Icons.image_not_supported_outlined,
+              color: c.warning,
+              size: 40,
+            ),
+            title: Text(
+              'Unreadable Image',
+              style: AppTextStyles.title.copyWith(
+                color: c.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            content: Text(
+              'Unreadable file, please upload picture with clear image of the label.',
+              style: AppTextStyles.body.copyWith(
+                color: c.textSecondary,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: c.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  elevation: 0,
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK, Re-upload'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
 
     showModalBottomSheet(
-      context: context,
+      context: sc,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => AppBottomSheet(
-        title: 'Edit Entry',
-        children: [
-          AppTextField(controller: nameCtrl, hint: 'Name', icon: Icons.label),
-          const SizedBox(height: AppSpacing.sm),
-          AppTextField(
-            controller: calCtrl,
-            hint: 'Calories',
-            icon: Icons.local_fire_department,
-            isNumber: true,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: vm,
+        child: ScanConfirmSheet(
+          initial: vm.extractedResult ?? ScanResultModel.empty,
+        ),
+      ),
+    );
+  }
+
+  // ── Build ───────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+
+    return Scaffold(
+      backgroundColor: c.background,
+      appBar: AppBar(
+        backgroundColor: c.card,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: c.textPrimary),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(
+          'Multi-Angle Scan',
+          style: AppTextStyles.title.copyWith(
+            color: c.textPrimary,
+            fontSize: 17,
           ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Expanded(
-                child: AppTextField(
-                  controller: proCtrl,
-                  hint: 'Protein g',
-                  icon: Icons.fitness_center,
-                  isNumber: true,
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.help_outline, color: c.textSecondary, size: 20),
+            onPressed: () => setState(() => _showInstructions = true),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: _ProgressHeader(
+                    captured: _capturedRequired,
+                    total: _totalRequired,
+                    primaryColor: c.primary,
+                  ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: AppTextField(
-                  controller: carbCtrl,
-                  hint: 'Carbs g',
-                  icon: Icons.grain,
-                  isNumber: true,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: AppTextField(
-                  controller: fatCtrl,
-                  hint: 'Fat g',
-                  icon: Icons.water_drop,
-                  isNumber: true,
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) => _SlotCard(
+                      slot: _slots[i],
+                      index: i,
+                      onCapture: () => _captureSlot(_slots[i]),
+                    ),
+                    childCount: _slots.length,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          AppPrimaryButton(
-            label: 'Save Changes',
-            onPressed: () async {
-              final uid = context.read<AuthViewModel>().currentUid ?? '';
-              _log.foodLogName = nameCtrl.text.trim();
-              _log.calorieIntake =
-                  int.tryParse(calCtrl.text) ?? _log.calorieIntake;
-              _log.protein = double.tryParse(proCtrl.text) ?? _log.protein;
-              _log.carbs = double.tryParse(carbCtrl.text) ?? _log.carbs;
-              _log.fats = double.tryParse(fatCtrl.text) ?? _log.fats;
-              await context.read<FoodHistoryViewModel>().update(uid, _log);
-              setState(() {});
-              if (context.mounted) Navigator.pop(context);
-            },
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _AnalyseButton(
+              canAnalyse: _canAnalyse,
+              capturedRequired: _capturedRequired,
+              totalRequired: _totalRequired,
+              pulse: _pulse,
+              onPressed: _analyse,
+            ),
+          ),
+          if (_showInstructions)
+            _InstructionOverlay(
+              onDismiss: () => setState(() => _showInstructions = false),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Progress header ────────────────────────────────────────────────────────
+
+class _ProgressHeader extends StatelessWidget {
+  final int captured;
+  final int total;
+  final Color primaryColor;
+
+  const _ProgressHeader({
+    required this.captured,
+    required this.total,
+    required this.primaryColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    final progress = total > 0 ? captured / total : 0.0;
+    final done = captured >= total;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: done ? primaryColor.withValues(alpha: 0.08) : c.card,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(
+          color: done ? primaryColor.withValues(alpha: 0.3) : c.divider,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                done ? Icons.check_circle : Icons.camera_alt_outlined,
+                color: done ? primaryColor : c.textSecondary,
+                size: 18,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  done
+                      ? 'All required angles captured — ready to analyse!'
+                      : 'Capture $total angles for best accuracy',
+                  style: AppTextStyles.bodyCompact.copyWith(
+                    color: done ? primaryColor : c.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '$captured / $total',
+                style: AppTextStyles.bodyCompact.copyWith(
+                  color: done ? primaryColor : c.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 5,
+              backgroundColor: c.divider,
+              valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs + 2),
+          Text(
+            'More angles → more complete text extraction → more accurate AI verdict',
+            style: AppTextStyles.micro.copyWith(
+              color: c.textSecondary,
+              height: 1.4,
+            ),
           ),
         ],
       ),
@@ -310,25 +515,447 @@ class _FoodDetailViewState extends State<FoodDetailView> {
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final Widget value;
-  const _InfoRow({required this.label, required this.value});
+// ── Slot card ──────────────────────────────────────────────────────────────
+
+class _SlotCard extends StatelessWidget {
+  final _AngleSlot slot;
+  final int index;
+  final VoidCallback onCapture;
+
+  const _SlotCard({
+    required this.slot,
+    required this.index,
+    required this.onCapture,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs + 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: AppTextStyles.caption.copyWith(color: C0Theme.slateGrey),
+    final c = C0Theme.of(context);
+    final captured = slot.captured;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm + 2),
+      decoration: BoxDecoration(
+        color: c.card,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(
+          color: captured
+              ? c.success.withValues(alpha: 0.5)
+              : slot.required
+              ? c.divider
+              : c.divider.withValues(alpha: 0.5),
+          width: captured ? 1.5 : 1.0,
+        ),
+      ),
+      child: InkWell(
+        onTap: onCapture,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            children: [
+              _SlotThumbnail(slot: slot),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          slot.label,
+                          style: AppTextStyles.bodyCompact.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: c.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        if (slot.required)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: c.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.pill,
+                              ),
+                            ),
+                            child: Text(
+                              'Required',
+                              style: AppTextStyles.micro.copyWith(
+                                color: c.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: c.slate.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.pill,
+                              ),
+                            ),
+                            child: Text(
+                              'Optional',
+                              style: AppTextStyles.micro.copyWith(
+                                color: c.slate,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      slot.hint,
+                      style: AppTextStyles.micro.copyWith(
+                        color: c.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Icon(
+                captured ? Icons.refresh : Icons.camera_alt_outlined,
+                color: captured ? c.success : c.primary,
+                size: 20,
+              ),
+            ],
           ),
-          value,
-        ],
+        ),
       ),
     );
   }
+}
+
+class _SlotThumbnail extends StatelessWidget {
+  final _AngleSlot slot;
+  const _SlotThumbnail({required this.slot});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+
+    if (slot.captured) {
+      return Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            child: Image.file(
+              slot.image!,
+              width: 64,
+              height: 64,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned(
+            bottom: 2,
+            right: 2,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: c.success,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              child: const Icon(Icons.check, color: Colors.white, size: 11),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: c.background,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(
+          color: slot.required ? c.primary.withValues(alpha: 0.3) : c.divider,
+        ),
+      ),
+      child: Icon(
+        slot.icon,
+        color: slot.required
+            ? c.primary.withValues(alpha: 0.5)
+            : c.slate.withValues(alpha: 0.4),
+        size: 26,
+      ),
+    );
+  }
+}
+
+// ── Analyse button ─────────────────────────────────────────────────────────
+
+class _AnalyseButton extends StatelessWidget {
+  final bool canAnalyse;
+  final int capturedRequired;
+  final int totalRequired;
+  final Animation<double> pulse;
+  final VoidCallback onPressed;
+
+  const _AnalyseButton({
+    required this.canAnalyse,
+    required this.capturedRequired,
+    required this.totalRequired,
+    required this.pulse,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    return Container(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 12,
+        bottom: 16 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: c.card,
+        border: Border(top: BorderSide(color: c.divider)),
+      ),
+      child: canAnalyse
+          ? ScaleTransition(
+              scale: pulse,
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: onPressed,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: c.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    elevation: 0,
+                  ),
+                  icon: const Icon(Icons.auto_awesome, size: 18),
+                  label: Text(
+                    'Analyse $capturedRequired Angles',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: c.divider,
+                  disabledBackgroundColor: c.divider,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  'Capture ${totalRequired - capturedRequired} more required angle'
+                  '${totalRequired - capturedRequired == 1 ? '' : 's'} to continue',
+                  style: TextStyle(
+                    color: c.textSecondary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+// ── Instruction overlay ────────────────────────────────────────────────────
+
+class _InstructionOverlay extends StatefulWidget {
+  final VoidCallback onDismiss;
+  const _InstructionOverlay({required this.onDismiss});
+
+  @override
+  State<_InstructionOverlay> createState() => _InstructionOverlayState();
+}
+
+class _InstructionOverlayState extends State<_InstructionOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  static const _steps = [
+    _Step(
+      Icons.crop_portrait,
+      '1. Front Panel',
+      'Capture the front of the product showing the brand name, type, and net weight.',
+    ),
+    _Step(
+      Icons.table_chart_outlined,
+      '2. Nutrition Facts',
+      'Photograph the nutrition facts panel clearly. Hold steady to avoid blur.',
+    ),
+    _Step(
+      Icons.list_alt_rounded,
+      '3. Ingredients',
+      'Capture the full ingredients list. Multiple angles help if the text wraps around the tub.',
+    ),
+    _Step(
+      Icons.auto_awesome,
+      'Why 3 angles?',
+      'Each photo adds more text. The system merges all angles so the AI sees the most complete label possible.',
+    ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    )..forward();
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = C0Theme.of(context);
+    return FadeTransition(
+      opacity: _anim,
+      child: GestureDetector(
+        onTap: widget.onDismiss,
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.75),
+          child: Center(
+            child: GestureDetector(
+              onTap: () {},
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                decoration: BoxDecoration(
+                  color: c.card,
+                  borderRadius: BorderRadius.circular(AppRadius.xl),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: c.primary, size: 20),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'How Multi-Angle Scan Works',
+                            style: AppTextStyles.title.copyWith(
+                              color: c.textPrimary,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    ..._steps.map(
+                      (step) => Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: AppSpacing.sm + 2,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: c.primary.withValues(alpha: 0.10),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                step.icon,
+                                color: c.primary,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    step.title,
+                                    style: AppTextStyles.bodyCompact.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: c.textPrimary,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    step.body,
+                                    style: AppTextStyles.micro.copyWith(
+                                      color: c.textSecondary,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: widget.onDismiss,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: c.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Got it — start capturing',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Step {
+  final IconData icon;
+  final String title;
+  final String body;
+  const _Step(this.icon, this.title, this.body);
 }

@@ -120,12 +120,70 @@ class _MultiAngleCaptureScreenState extends State<MultiAngleCaptureScreen>
   // ── Capture a single angle ──────────────────────────────────────────────
 
   Future<void> _captureSlot(_AngleSlot slot) async {
-    final picked = await _picker.pickImage(
-      source: ImageSource.camera,
-      imageQuality: 92,
-    );
+    final source = await _pickImageSource();
+    if (source == null) return;
+    final picked = await _picker.pickImage(source: source, imageQuality: 92);
     if (picked == null) return;
     setState(() => slot.image = File(picked.path));
+  }
+
+  /// Shows a small action sheet letting the user choose Camera or Gallery.
+  Future<ImageSource?> _pickImageSource() async {
+    final c = C0Theme.of(context);
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        decoration: BoxDecoration(
+          color: c.card,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppRadius.sheet),
+          ),
+        ),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.md,
+          AppSpacing.lg,
+          AppSpacing.lg + MediaQuery.of(sheetCtx).padding.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: AppSpacing.md),
+              decoration: BoxDecoration(
+                color: c.divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_camera_outlined, color: c.primary),
+              title: Text(
+                'Take Photo',
+                style: AppTextStyles.bodyCompact.copyWith(
+                  color: c.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              onTap: () => Navigator.of(sheetCtx).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_library_outlined, color: c.primary),
+              title: Text(
+                'Choose from Gallery',
+                style: AppTextStyles.bodyCompact.copyWith(
+                  color: c.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              onTap: () => Navigator.of(sheetCtx).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Trigger the multi-image scan pipeline ───────────────────────────────
@@ -450,12 +508,26 @@ class _SlotCard extends StatelessWidget {
 
               const SizedBox(width: AppSpacing.sm),
 
-              // Action icon
-              Icon(
-                captured ? Icons.refresh : Icons.camera_alt_outlined,
-                color: captured ? c.success : c.primary,
-                size: 20,
-              ),
+              // Action icon(s) — show both camera + gallery when not yet
+              // captured, so the gallery option is visible without tapping.
+              captured
+                  ? Icon(Icons.refresh, color: c.success, size: 20)
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.camera_alt_outlined,
+                          color: c.primary,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(
+                          Icons.photo_library_outlined,
+                          color: c.primary.withValues(alpha: 0.6),
+                          size: 16,
+                        ),
+                      ],
+                    ),
             ],
           ),
         ),
@@ -632,6 +704,11 @@ class _InstructionOverlayState extends State<_InstructionOverlay>
   late final Animation<double> _anim;
 
   static const _steps = [
+    _Step(
+      Icons.touch_app_outlined,
+      'Tip: Camera or Gallery',
+      'Tap any slot below — you can take a new photo or choose an existing one from your gallery.',
+    ),
     _Step(
       Icons.crop_portrait,
       '1. Front Panel',

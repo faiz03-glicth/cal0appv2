@@ -24,24 +24,29 @@ class RegisterViewModel extends ChangeNotifier {
     required double weight,
     required double height,
   }) async {
-    // Validation
+    // Validation — collect every problem instead of stopping at the first,
+    // then end with a generic re-enter prompt (matches STD TC001_02 steps
+    // 3-5: Invalid Email Format / Invalid Password Format / Re-enter
+    // correct credentials).
+    final problems = <String>[];
+
     if (userName.isEmpty || userEmail.isEmpty || userPassword.isEmpty) {
       errorMessage = 'Please fill in all fields';
       notifyListeners();
       return false;
     }
     if (!userEmail.contains('@')) {
-      errorMessage = 'Invalid email format';
-      notifyListeners();
-      return false;
+      problems.add('Invalid Email Format');
     }
     if (userPassword.length < 6) {
-      errorMessage = 'Password must be at least 6 characters';
-      notifyListeners();
-      return false;
+      problems.add('Invalid Password Format');
     }
     if (userPassword != confirmPassword) {
-      errorMessage = 'Passwords do not match';
+      problems.add('Passwords do not match');
+    }
+
+    if (problems.isNotEmpty) {
+      errorMessage = '${problems.join('. ')}. Re-enter correct credentials.';
       notifyListeners();
       return false;
     }

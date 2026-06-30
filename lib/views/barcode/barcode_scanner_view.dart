@@ -187,7 +187,7 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
     );
   }
 }
-
+   
 class _ScanOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

@@ -109,7 +109,9 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
     );
     if (picked == null || !mounted) return;
 
-    setState(() => _uploading = true);
+    setState(() {
+      _uploading = true;
+    });
     _controller.stop(); // pause live scanner while we decode the static image
 
     try {
@@ -118,7 +120,7 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
 
       if (!mounted) return;
 
-      if (!found) {
+      if (found != true) {
         // No barcode detected in the uploaded image
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -161,7 +163,10 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
         _controller.start();
       }
     } finally {
-      if (mounted) setState(() => _uploading = false);
+      if (mounted)
+        setState(() {
+          _uploading = false;
+        });
     }
   }
 
@@ -203,7 +208,9 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
           IconButton(
             icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
             onPressed: () {
-              setState(() => _torchOn = !_torchOn);
+              setState(() {
+                _torchOn = !_torchOn;
+              });
               _controller.toggleTorch();
             },
           ),

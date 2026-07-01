@@ -10,6 +10,7 @@ import 'package:cal0appv2/views/widgets/app_message_banner.dart';
 import 'package:cal0appv2/views/widgets/app_bottom_sheet.dart';
 import 'package:cal0appv2/views/widgets/health_warning_dialog.dart';
 import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
+import 'package:cal0appv2/views/widgets/whey_verdict_card.dart';
 
 class ScanConfirmSheet extends StatefulWidget {
   final ScanResultModel initial;
@@ -31,13 +32,14 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
   late final TextEditingController _brand;
 
   bool _addToFoodLog = true;
-  bool _filledFromVm = false; // guard: only auto-fill once
+
+  // FIX #1 — track whether we have applied real VM data yet.
+  // This is now reset-able so a second notifyListeners() can re-fill.
+  bool _filledFromVm = false;
 
   @override
   void initState() {
     super.initState();
-    // Init with widget.initial — may be ScanResultModel.empty if sheet opened
-    // before the pipeline finished. didChangeDependencies fills for real.
     _name = TextEditingController(text: widget.initial.productName);
     _calories = TextEditingController(text: _fmt(widget.initial.calories));
     _protein = TextEditingController(text: _fmt(widget.initial.protein));
@@ -47,38 +49,6 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
     _sodium = TextEditingController(text: _fmt(widget.initial.sodium));
     _serving = TextEditingController(text: _fmt(widget.initial.servingSize));
     _brand = TextEditingController();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_filledFromVm) return;
-
-    final vm = context.read<ScanViewModel>();
-    final r = vm.extractedResult;
-    if (r == null) return;
-
-    // Mark filled even if r has zeros — prevents repeated calls
-    _filledFromVm = true;
-
-    bool changed = false;
-    void fill(TextEditingController c, String val) {
-      if (val.isEmpty) return;
-      c.text = val;
-      changed = true;
-    }
-
-    fill(_name, r.productName);
-    fill(_calories, _fmt(r.calories));
-    fill(_protein, _fmt(r.protein));
-    fill(_carbs, _fmt(r.carbs));
-    fill(_fat, _fmt(r.fat));
-    fill(_sugar, _fmt(r.sugar));
-    fill(_sodium, _fmt(r.sodium));
-    fill(_serving, _fmt(r.servingSize));
-
-    // Trigger rebuild so TextFields show the new values
-    if (changed) setState(() {});
   }
 
   @override
@@ -95,9 +65,34 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
     super.dispose();
   }
 
-  // ── Formatting helpers ────────────────────────────────────────────────────
+  // ── FIX #1: fill controllers from VM result ───────────────────────────
+  // Called from build() whenever vm.extractedResult first becomes non-null.
+  // Safe to call from build() because it only runs once (guard flag).
 
-  // Strip trailing .0 so "120.0" shows as "120", "25.5" stays "25.5"
+  void _tryFillFromVm(ScanViewModel vm) {
+    if (_filledFromVm) return;
+    final r = vm.extractedResult;
+    if (r == null) return;
+
+    _filledFromVm = true;
+
+    void fill(TextEditingController c, String val) {
+      if (val.isNotEmpty) c.text = val;
+    }
+
+    fill(_name, r.productName);
+    fill(_calories, _fmt(r.calories));
+    fill(_protein, _fmt(r.protein));
+    fill(_carbs, _fmt(r.carbs));
+    fill(_fat, _fmt(r.fat));
+    fill(_sugar, _fmt(r.sugar));
+    fill(_sodium, _fmt(r.sodium));
+    fill(_serving, _fmt(r.servingSize));
+    // No setState needed — the Consumer that calls this already triggers rebuild.
+  }
+
+  // ── Formatting helpers ────────────────────────────────────────────────
+
   static String _fmt(num? v) {
     if (v == null || v == 0) return '';
     if (v is int) return '$v';
@@ -107,9 +102,7 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
         : d.toStringAsFixed(1);
   }
 
-  static bool _hasVal(num? v) => v != null && v != 0;
-
-  // ── Save ──────────────────────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────────────────
 
   Future<void> _save(BuildContext ctx, ScanViewModel vm) async {
     final uid = ctx.read<AuthViewModel>().currentUid ?? '';
@@ -159,182 +152,183 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final c = C0Theme.of(context);
-    final vm = context.watch<ScanViewModel>();
-    final healthVm = context.watch<HealthWarningViewModel>();
+    // FIX #1 — use Consumer so we react every time vm notifies.
+    // _tryFillFromVm() is called here, inside the build, which is safe because
+    // it only mutates controllers (not widget state) and only runs once.
+    return Consumer<ScanViewModel>(
+      builder: (context, vm, _) {
+        _tryFillFromVm(vm); // fills controllers the moment result arrives
 
-    final conf = vm.ocrConfidence > 0.0
-        ? vm.ocrConfidence
-        : widget.initial.extractionConfidence;
+        final c = C0Theme.of(context);
+        final healthVm = context.watch<HealthWarningViewModel>();
+        final conf = vm.ocrConfidence > 0.0
+            ? vm.ocrConfidence
+            : widget.initial.extractionConfidence;
 
-    return AppBottomSheet(
-      subtitle: _SheetHeader(confidence: conf),
-      children: [
-        // ── DEBUG PANEL — remove before release ──────────────────────
-        _DebugPanel(vm: vm),
-        const SizedBox(height: AppSpacing.md),
-
-        // ── AI verdict ────────────────────────────────────────────────
-        _AiVerdictBanner(vm: vm),
-        const SizedBox(height: AppSpacing.md),
-
-        // ── Flagged ingredients ───────────────────────────────────────
-        if (vm.detectedIngredients.isNotEmpty) ...[
-          _FlaggedIngredientsPanel(ingredients: vm.detectedIngredients),
-          const SizedBox(height: AppSpacing.md),
-        ],
-
-        // ── OCR quality warning ───────────────────────────────────────
-        if (vm.lowOcrQuality || conf < 0.40) ...[
-          _QualityWarning(isLowQuality: vm.lowOcrQuality, confidence: conf),
-          const SizedBox(height: AppSpacing.md),
-        ],
-
-        // ── Ingredient list ───────────────────────────────────────────
-        if (_ingredientText(vm).isNotEmpty) ...[
-          _IngredientListSection(text: _ingredientText(vm)),
-          const SizedBox(height: AppSpacing.md),
-        ],
-
-        // ── Product name + serving ────────────────────────────────────
-        _Field(
-          controller: _name,
-          label: 'Product Name',
-          hint: 'e.g. Gold Standard Whey',
-          icon: Icons.label_outline,
-          keyboardType: TextInputType.text,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        _Field(
-          controller: _brand,
-          label: 'Brand Name',
-          hint: 'e.g. Optimum Nutrition',
-          icon: Icons.storefront_outlined,
-          keyboardType: TextInputType.text,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        _Field(
-          controller: _serving,
-          label: 'Serving Size',
-          hint: '0',
-          icon: Icons.straighten,
-          unit: 'g',
-        ),
-
-        const SizedBox(height: AppSpacing.md),
-        _SectionLabel('Macros per serving'),
-        const SizedBox(height: AppSpacing.sm),
-
-        // ── Macro grid ────────────────────────────────────────────────
-        Row(
+        return AppBottomSheet(
+          subtitle: _SheetHeader(confidence: conf),
           children: [
-            Expanded(
-              child: _Field(
-                controller: _calories,
-                label: 'Calories',
-                hint: '0',
-                icon: Icons.local_fire_department_outlined,
-                unit: 'kcal',
-                accent: const Color(0xFFFF6B35),
-              ),
+            // FIX #2 — WheyVerdictCard is first — impossible to miss
+            WheyVerdictCard(vm: vm),
+            const SizedBox(height: AppSpacing.md),
+
+            // ── Flagged ingredients ───────────────────────────────
+            if (vm.detectedIngredients.isNotEmpty) ...[
+              _FlaggedIngredientsPanel(ingredients: vm.detectedIngredients),
+              const SizedBox(height: AppSpacing.md),
+            ],
+
+            // ── OCR quality warning ───────────────────────────────
+            if (vm.lowOcrQuality || conf < 0.40) ...[
+              _QualityWarning(isLowQuality: vm.lowOcrQuality, confidence: conf),
+              const SizedBox(height: AppSpacing.md),
+            ],
+
+            // ── Ingredient list ───────────────────────────────────
+            if (_ingredientText(vm).isNotEmpty) ...[
+              _IngredientListSection(text: _ingredientText(vm)),
+              const SizedBox(height: AppSpacing.md),
+            ],
+
+            // ── Editable fields ───────────────────────────────────
+            _Field(
+              controller: _name,
+              label: 'Product Name',
+              hint: 'e.g. Gold Standard Whey',
+              icon: Icons.label_outline,
+              keyboardType: TextInputType.text,
             ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: _Field(
-                controller: _protein,
-                label: 'Protein',
-                hint: '0',
-                icon: Icons.fitness_center,
-                unit: 'g',
-                accent: const Color(0xFF3B82F6),
-              ),
+            const SizedBox(height: AppSpacing.sm),
+            _Field(
+              controller: _brand,
+              label: 'Brand Name',
+              hint: 'e.g. Optimum Nutrition',
+              icon: Icons.storefront_outlined,
+              keyboardType: TextInputType.text,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _Field(
+              controller: _serving,
+              label: 'Serving Size',
+              hint: '0',
+              icon: Icons.straighten,
+              unit: 'g',
+            ),
+
+            const SizedBox(height: AppSpacing.md),
+            _SectionLabel('Macros per serving'),
+            const SizedBox(height: AppSpacing.sm),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _Field(
+                    controller: _calories,
+                    label: 'Calories',
+                    hint: '0',
+                    icon: Icons.local_fire_department_outlined,
+                    unit: 'kcal',
+                    accent: const Color(0xFFFF6B35),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: _Field(
+                    controller: _protein,
+                    label: 'Protein',
+                    hint: '0',
+                    icon: Icons.fitness_center,
+                    unit: 'g',
+                    accent: const Color(0xFF3B82F6),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: _Field(
+                    controller: _carbs,
+                    label: 'Carbs',
+                    hint: '0',
+                    icon: Icons.grain,
+                    unit: 'g',
+                    accent: const Color(0xFFF59E0B),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: _Field(
+                    controller: _fat,
+                    label: 'Fat',
+                    hint: '0',
+                    icon: Icons.water_drop_outlined,
+                    unit: 'g',
+                    accent: const Color(0xFF8B5CF6),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: _Field(
+                    controller: _sugar,
+                    label: 'Sugar',
+                    hint: '0',
+                    icon: Icons.cookie_outlined,
+                    unit: 'g',
+                    accent: const Color(0xFFEC4899),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: _Field(
+                    controller: _sodium,
+                    label: 'Sodium',
+                    hint: '0',
+                    icon: Icons.water_outlined,
+                    unit: 'mg',
+                    accent: const Color(0xFF06B6D4),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: AppSpacing.md),
+
+            _DiaryToggle(
+              value: _addToFoodLog,
+              onChanged: (v) => setState(() => _addToFoodLog = v),
+            ),
+
+            if (healthVm.hasConditions) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _HealthBadge(),
+            ],
+
+            const SizedBox(height: AppSpacing.lg),
+
+            if (vm.errorMessage != null) ...[
+              AppMessageBanner.error(message: vm.errorMessage!),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+
+            AppPrimaryButton(
+              label: vm.isSaving ? 'Saving...' : 'Save to Diary',
+              isLoading: vm.isSaving,
+              icon: Icons.save_outlined,
+              onPressed: () => _save(context, vm),
             ),
           ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          children: [
-            Expanded(
-              child: _Field(
-                controller: _carbs,
-                label: 'Carbs',
-                hint: '0',
-                icon: Icons.grain,
-                unit: 'g',
-                accent: const Color(0xFFF59E0B),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: _Field(
-                controller: _fat,
-                label: 'Fat',
-                hint: '0',
-                icon: Icons.water_drop_outlined,
-                unit: 'g',
-                accent: const Color(0xFF8B5CF6),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          children: [
-            Expanded(
-              child: _Field(
-                controller: _sugar,
-                label: 'Sugar',
-                hint: '0',
-                icon: Icons.cookie_outlined,
-                unit: 'g',
-                accent: const Color(0xFFEC4899),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: _Field(
-                controller: _sodium,
-                label: 'Sodium',
-                hint: '0',
-                icon: Icons.water_outlined,
-                unit: 'mg',
-                accent: const Color(0xFF06B6D4),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: AppSpacing.md),
-
-        // ── Diary toggle ──────────────────────────────────────────────
-        _DiaryToggle(
-          value: _addToFoodLog,
-          onChanged: (v) => setState(() => _addToFoodLog = v),
-        ),
-
-        if (healthVm.hasConditions) ...[
-          const SizedBox(height: AppSpacing.sm),
-          _HealthBadge(),
-        ],
-
-        const SizedBox(height: AppSpacing.lg),
-
-        if (vm.errorMessage != null) ...[
-          AppMessageBanner.error(message: vm.errorMessage!),
-          const SizedBox(height: AppSpacing.sm),
-        ],
-
-        AppPrimaryButton(
-          label: vm.isSaving ? 'Saving...' : 'Save to Diary',
-          isLoading: vm.isSaving,
-          icon: Icons.save_outlined,
-          onPressed: () => _save(context, vm),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -376,7 +370,6 @@ class _SheetHeader extends StatelessWidget {
                 style: AppTextStyles.title.copyWith(color: c.textPrimary),
               ),
             ),
-            // OCR confidence badge
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
@@ -423,7 +416,8 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-// ── Editable nutrition field ───────────────────────────────────────────────
+// ── Editable field ─────────────────────────────────────────────────────────
+
 class _Field extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -446,7 +440,6 @@ class _Field extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
-
     return Container(
       decoration: BoxDecoration(
         color: c.card,
@@ -502,109 +495,6 @@ class _Field extends StatelessWidget {
           contentPadding: const EdgeInsets.fromLTRB(0, 10, 8, 10),
           isDense: true,
         ),
-      ),
-    );
-  }
-}
-
-// ── AI verdict banner ──────────────────────────────────────────────────────
-
-class _AiVerdictBanner extends StatelessWidget {
-  final ScanViewModel vm;
-  const _AiVerdictBanner({required this.vm});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = C0Theme.of(context);
-    Color color;
-    IconData icon;
-    String headline;
-    String sub;
-    final pct = '${(vm.aiConfidence * 100).toStringAsFixed(0)}%';
-
-    if (vm.lowOcrQuality) {
-      color = c.slate;
-      icon = Icons.blur_on;
-      headline = 'Image quality too low';
-      sub = 'Retake with better lighting for AI analysis';
-    } else if (vm.aiLabel.isEmpty && vm.scannedText == null) {
-      color = c.slate;
-      icon = Icons.help_outline;
-      headline = 'No label text detected';
-      sub = 'Enter values manually below';
-    } else if (vm.aiLabel.isEmpty) {
-      color = Colors.orange;
-      icon = Icons.info_outline;
-      headline = 'Ingredient section not found';
-      sub = 'AI unavailable — fill in manually';
-    } else if (vm.lowAiConfidence) {
-      color = Colors.orange;
-      icon = Icons.help_outline;
-      headline = 'Low AI confidence ($pct)';
-      sub = 'Please verify manually';
-    } else {
-      switch (vm.aiLabel) {
-        case 'Spiked':
-          color = c.warning;
-          icon = Icons.warning_rounded;
-          headline = '⚠ Amino Spiking Detected';
-          sub = 'Spiked · $pct confidence';
-          break;
-        case 'Plant-Based':
-          color = const Color(0xFF22C55E);
-          icon = Icons.eco;
-          headline = '🌱 Plant-Based Protein';
-          sub = 'Plant-Based · $pct confidence';
-          break;
-        default:
-          color = c.success;
-          icon = Icons.shield;
-          headline = '✓ Looks Authentic';
-          sub = 'Authentic · $pct confidence';
-          break;
-      }
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: color.withValues(alpha: 0.35), width: 1.5),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  headline,
-                  style: AppTextStyles.bodyCompact.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: color,
-                  ),
-                ),
-                Text(
-                  sub,
-                  style: AppTextStyles.caption.copyWith(
-                    color: color.withValues(alpha: 0.8),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -871,8 +761,7 @@ class _IngredientListSectionState extends State<_IngredientListSection> {
                           ),
                         ),
                         Text(
-                          '${items.isEmpty ? '?' : items.length} ingredients'
-                          ' — tap to view',
+                          '${items.isEmpty ? '?' : items.length} ingredients — tap to view',
                           style: AppTextStyles.micro.copyWith(
                             color: c.textSecondary,
                           ),
@@ -1071,173 +960,6 @@ class _HealthBadge extends StatelessWidget {
           Text(
             'Health check will run on save',
             style: AppTextStyles.micro.copyWith(color: c.primary),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DebugPanel extends StatefulWidget {
-  final ScanViewModel vm;
-  const _DebugPanel({required this.vm});
-  @override
-  State<_DebugPanel> createState() => _DebugPanelState();
-}
-
-class _DebugPanelState extends State<_DebugPanel> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = C0Theme.of(context);
-    final vm = widget.vm;
-    final r = vm.extractedResult;
-
-    // Summary line shown even when collapsed
-    final hasData =
-        r != null &&
-        (r.calories > 0 || r.protein > 0 || r.carbs > 0 || r.fat > 0);
-    final ocrLines = vm.scannedLines.length;
-    final ocrChars = vm.scannedText?.length ?? 0;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: hasData
-            ? const Color(0xFF166534).withValues(alpha: 0.15)
-            : const Color(0xFF7F1D1D).withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(
-          color: hasData ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header (always visible) ─────────────────────────────
-          GestureDetector(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.bug_report_outlined,
-                    size: 16,
-                    color: hasData
-                        ? const Color(0xFF22C55E)
-                        : const Color(0xFFEF4444),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      hasData
-                          ? '✓ DEBUG: Data parsed — cal=${r!.calories} pro=${r.protein}g carbs=${r.carbs}g fat=${r.fat}g'
-                          : '✗ DEBUG: No nutrition data parsed — OCR got $ocrLines lines ($ocrChars chars)',
-                      style: AppTextStyles.micro.copyWith(
-                        color: hasData
-                            ? const Color(0xFF22C55E)
-                            : const Color(0xFFEF4444),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    size: 16,
-                    color: c.textSecondary,
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ── Expanded detail ─────────────────────────────────────
-          if (_expanded) ...[
-            Divider(height: 1, color: c.divider),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Parsed values
-                  _dbgRow('Product name', r?.productName ?? 'empty'),
-                  _dbgRow('Calories', '${r?.calories ?? 0}'),
-                  _dbgRow('Protein', '${r?.protein ?? 0}g'),
-                  _dbgRow('Carbs', '${r?.carbs ?? 0}g'),
-                  _dbgRow('Fat', '${r?.fat ?? 0}g'),
-                  _dbgRow('Sugar', '${r?.sugar ?? 0}g'),
-                  _dbgRow('Sodium', '${r?.sodium ?? 0}mg'),
-                  _dbgRow('Serving', '${r?.servingSize ?? 0}g'),
-                  _dbgRow('OCR lines', '$ocrLines'),
-                  _dbgRow('OCR chars', '$ocrChars'),
-                  _dbgRow(
-                    'OCR conf',
-                    '${(vm.ocrConfidence * 100).toStringAsFixed(0)}%',
-                  ),
-                  _dbgRow('Low quality', '${vm.lowOcrQuality}'),
-                  _dbgRow('Gemini used', '${vm.geminiUsed}'),
-                  _dbgRow('AI label', vm.aiLabel.isEmpty ? 'none' : vm.aiLabel),
-                  const SizedBox(height: AppSpacing.sm),
-
-                  // Raw OCR text
-                  Text(
-                    'Raw OCR text:',
-                    style: AppTextStyles.micro.copyWith(
-                      color: c.textSecondary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(AppSpacing.sm),
-                    decoration: BoxDecoration(
-                      color: c.background,
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                      border: Border.all(color: c.divider),
-                    ),
-                    child: SelectableText(
-                      vm.scannedText?.isNotEmpty == true
-                          ? vm.scannedText!
-                          : '(empty — OCR produced no text)',
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 9,
-                        color: c.textSecondary,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _dbgRow(String label, String value) {
-    final c = C0Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 90,
-            child: Text(
-              label,
-              style: AppTextStyles.micro.copyWith(color: c.textSecondary),
-            ),
-          ),
-          Text(
-            value,
-            style: AppTextStyles.micro.copyWith(
-              color: c.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
           ),
         ],
       ),

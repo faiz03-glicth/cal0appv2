@@ -6,6 +6,7 @@ import 'package:cal0appv2/models/off_food_result.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
 import 'package:cal0appv2/repositories/off_food_repository.dart';
 import 'package:cal0appv2/services/cache/recent_food_cache.dart';
+import 'package:cal0appv2/services/scan/ingredient_authenticity_service.dart';
 
 enum HistoryFilter { all, manual, scanned }
 
@@ -54,6 +55,22 @@ class FoodLogViewModel extends ChangeNotifier {
   // Serving size for rescaling
   double servingGrams = 100;
 
+  // ── Supplements toggle ──────────────────────────────────────────────
+  // OFF (default) = Normal Food Logging — no ingredient list, no
+  // Authentic/Non-Authentic check, nothing extra saved.
+  // ON = Whey Supplement — shows the ingredient list field and runs the
+  // same nitrogen-compound check used by the live scan and food history,
+  // via IngredientAuthenticityService.
+  bool isSupplementMode = false;
+  String ingredientText = '';
+  double creatineMonohydrate = 0;
+  double bcaa = 0;
+  double leucine = 0;
+  double isoleucine = 0;
+  double valine = 0;
+  double glutamine = 0;
+  double taurine = 0;
+
   // Currently selected OFFFoodResult (for serving-size rescaling)
   OFFFoodResult? _selectedFood;
 
@@ -79,6 +96,14 @@ class FoodLogViewModel extends ChangeNotifier {
   double get totalSugar => _totals.sugar;
   double get totalSodium => _totals.sodium;
   bool get hasLogs => !_totals.isEmpty;
+
+  /// The current Authentic / Non-Authentic result for whatever ingredient
+  /// text is in the form right now — null when Supplements mode is off,
+  /// or there's no ingredient text yet to check.
+  AuthenticityCheck? get supplementAuthenticityCheck {
+    if (!isSupplementMode || ingredientText.trim().isEmpty) return null;
+    return IngredientAuthenticityService.check(ingredientText);
+  }
 
   // ── Load / Date navigation ─────────────────────────────────────────────
 
@@ -254,6 +279,16 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Toggles between Normal Food Logging (off) and Whey Supplement mode
+  /// (on). Turning Supplements on reveals the ingredient list field and
+  /// the Authentic / Non-Authentic check; turning it off hides them and
+  /// the check is skipped entirely — nothing supplement-related gets
+  /// evaluated or saved for a normal food log.
+  void setSupplementMode(bool v) {
+    isSupplementMode = v;
+    notifyListeners();
+  }
+
   void updateFoodName(String v) {
     foodName = v;
     notifyListeners();
@@ -279,6 +314,46 @@ class FoodLogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateIngredientText(String v) {
+    ingredientText = v;
+    notifyListeners();
+  }
+
+  void updateCreatineMonohydrate(String v) {
+    creatineMonohydrate = double.tryParse(v) ?? 0;
+    notifyListeners();
+  }
+
+  void updateBcaa(String v) {
+    bcaa = double.tryParse(v) ?? 0;
+    notifyListeners();
+  }
+
+  void updateLeucine(String v) {
+    leucine = double.tryParse(v) ?? 0;
+    notifyListeners();
+  }
+
+  void updateIsoleucine(String v) {
+    isoleucine = double.tryParse(v) ?? 0;
+    notifyListeners();
+  }
+
+  void updateValine(String v) {
+    valine = double.tryParse(v) ?? 0;
+    notifyListeners();
+  }
+
+  void updateGlutamine(String v) {
+    glutamine = double.tryParse(v) ?? 0;
+    notifyListeners();
+  }
+
+  void updateTaurine(String v) {
+    taurine = double.tryParse(v) ?? 0;
+    notifyListeners();
+  }
+
   void prefillForEdit(FoodLogModel log) {
     foodName = log.foodLogName;
     calories = log.calorieIntake.toString();
@@ -291,6 +366,28 @@ class FoodLogViewModel extends ChangeNotifier {
     saturatedFat = log.saturatedFat;
     servingGrams = log.servingSize ?? 100;
     manualMode = true;
+
+    // Restore Supplements state from the saved log so re-opening an
+    // existing whey entry for edit shows the toggle already on with its
+    // ingredients and compounds intact.
+    ingredientText = log.ingredientText;
+    creatineMonohydrate = log.creatineMonohydrate;
+    bcaa = log.bcaa;
+    leucine = log.leucine;
+    isoleucine = log.isoleucine;
+    valine = log.valine;
+    glutamine = log.glutamine;
+    taurine = log.taurine;
+    isSupplementMode =
+        log.ingredientText.trim().isNotEmpty ||
+        log.creatineMonohydrate > 0 ||
+        log.bcaa > 0 ||
+        log.leucine > 0 ||
+        log.isoleucine > 0 ||
+        log.valine > 0 ||
+        log.glutamine > 0 ||
+        log.taurine > 0;
+
     notifyListeners();
   }
 
@@ -310,7 +407,37 @@ class FoodLogViewModel extends ChangeNotifier {
     _searchResults = [];
     errorMessage = null;
     successMessage = null;
+    isSupplementMode = false;
+    ingredientText = '';
+    creatineMonohydrate = 0;
+    bcaa = 0;
+    leucine = 0;
+    isoleucine = 0;
+    valine = 0;
+    glutamine = 0;
+    taurine = 0;
     notifyListeners();
+  }
+
+  // ── Supplements save helpers ─────────────────────────────────────────
+  // Only ever populated when isSupplementMode is on — a Normal Food Log
+  // never carries ingredient text, supplement compounds, or an
+  // Authentic/Non-Authentic result.
+
+  String get _savedIngredientText =>
+      isSupplementMode ? ingredientText.trim() : '';
+  double get _savedCreatine => isSupplementMode ? creatineMonohydrate : 0;
+  double get _savedBcaa => isSupplementMode ? bcaa : 0;
+  double get _savedLeucine => isSupplementMode ? leucine : 0;
+  double get _savedIsoleucine => isSupplementMode ? isoleucine : 0;
+  double get _savedValine => isSupplementMode ? valine : 0;
+  double get _savedGlutamine => isSupplementMode ? glutamine : 0;
+  double get _savedTaurine => isSupplementMode ? taurine : 0;
+
+  String? _buildSupplementAnalysisResult() {
+    if (!isSupplementMode || ingredientText.trim().isEmpty) return null;
+    final check = IngredientAuthenticityService.check(ingredientText);
+    return check.isNonAuthentic ? 'NON-AUTHENTIC' : 'AUTHENTIC';
   }
 
   // ── CREATE ─────────────────────────────────────────────────────────────
@@ -342,6 +469,15 @@ class FoodLogViewModel extends ChangeNotifier {
         sodium: sodium,
         saturatedFat: saturatedFat,
         servingSize: servingGrams,
+        ingredientText: _savedIngredientText,
+        creatineMonohydrate: _savedCreatine,
+        bcaa: _savedBcaa,
+        leucine: _savedLeucine,
+        isoleucine: _savedIsoleucine,
+        valine: _savedValine,
+        glutamine: _savedGlutamine,
+        taurine: _savedTaurine,
+        scanAnalysisResult: _buildSupplementAnalysisResult(),
       );
 
       await _foodLogRepo.addFoodLog(uid, log);
@@ -403,7 +539,16 @@ class FoodLogViewModel extends ChangeNotifier {
         ..fiber = fiber
         ..sugar = sugar
         ..sodium = sodium
-        ..saturatedFat = saturatedFat;
+        ..saturatedFat = saturatedFat
+        ..ingredientText = _savedIngredientText
+        ..creatineMonohydrate = _savedCreatine
+        ..bcaa = _savedBcaa
+        ..leucine = _savedLeucine
+        ..isoleucine = _savedIsoleucine
+        ..valine = _savedValine
+        ..glutamine = _savedGlutamine
+        ..taurine = _savedTaurine
+        ..scanAnalysisResult = _buildSupplementAnalysisResult();
 
       await _foodLogRepo.updateFoodLog(uid, existing);
       final idx = _foodLogs.indexWhere(

@@ -11,14 +11,28 @@ import 'package:cal0appv2/services/scan/nutrition_extractor_service.dart';
 import 'package:cal0appv2/services/scan/image_preprocessor_service.dart';
 import 'package:cal0appv2/services/scan/ocr_text_cleaner_service.dart';
 import 'package:cal0appv2/services/scan/gemini_vision_service.dart';
+import 'package:cal0appv2/services/scan/ingredient_authenticity_service.dart';
 import 'package:cal0appv2/services/logs/debuglog_services.dart';
 import 'package:cal0appv2/services/logging/activity_logger.dart';
 import 'package:cal0appv2/models/logging/activity_log.dart';
 import 'package:cal0appv2/models/whey/whey_supplement_model.dart';
 import 'package:cal0appv2/repositories/whey_supplement_repository.dart';
 
+// Re-exported so existing imports of `DetectedIngredient` from this file
+// (e.g. whey_verdict_card.dart) keep working unchanged. The database and
+// detection logic itself now live in one place:
+// services/scan/ingredient_authenticity_service.dart — see that file for
+// the single source of truth used by both the live scan flow and food
+// history.
+export 'package:cal0appv2/services/scan/ingredient_authenticity_service.dart'
+    show DetectedIngredient;
+
 // ── Authenticity verdict enum ─────────────────────────────────────────────
-// Consumed by WheyVerdictCard for clear, unambiguous UI feedback.
+// Consumed by WheyVerdictCard for clear, unambiguous UI feedback. This is
+// the ML-driven verdict (can be authentic/spiked/plantBased/lowConf/
+// unknown, with a confidence score) — distinct from the deterministic
+// rule-based NitrogenCheckVerdict in IngredientAuthenticityService, which
+// only ever says authentic or non-authentic.
 
 enum AuthenticityVerdict {
   authentic, // AI says Authentic, confidence ≥ 50%
@@ -26,165 +40,6 @@ enum AuthenticityVerdict {
   plantBased, // AI says Plant-Based
   lowConf, // AI ran but confidence < 50%
   unknown, // AI didn't run (low OCR quality or no ingredient text)
-}
-
-// ── Ingredient rule database ──────────────────────────────────────────────
-
-class _IngredientRule {
-  final String name;
-  final String category;
-  final String explanation;
-  final List<String> aliases;
-  // Compounds that contain nitrogen and can distort protein/Kjeldahl-style
-  // readings if free-formed into a supplement. Used for the manual
-  // "re-check after edit" nitrogen-spiking scan.
-  final bool isNitrogenCompound;
-
-  const _IngredientRule({
-    required this.name,
-    required this.category,
-    required this.explanation,
-    required this.aliases,
-    this.isNitrogenCompound = false,
-  });
-}
-
-const _ingredientDatabase = <_IngredientRule>[
-  _IngredientRule(
-    name: 'Glycine',
-    category: 'Amino Spiking Agent',
-    explanation:
-        'Cheap amino acid sometimes added to inflate protein content on lab tests. '
-        'Does not provide the same muscle-building benefit as whey.',
-    aliases: ['glycine'],
-    isNitrogenCompound: true,
-  ),
-  _IngredientRule(
-    name: 'Taurine',
-    category: 'Amino Spiking Agent',
-    explanation:
-        'Free-form amino acid that registers as protein on Kjeldahl/Dumas tests '
-        'but is not a complete protein source and does not contribute to MPS.',
-    aliases: ['taurine'],
-    isNitrogenCompound: true,
-  ),
-  _IngredientRule(
-    name: 'Creatine Monohydrate',
-    category: 'Performance Compound / Potential Spiking Agent',
-    explanation:
-        'Creatine contains nitrogen and can inflate total protein readings. '
-        'It is a legitimate performance supplement, but its presence in a '
-        '"protein powder" label may indicate label amino spiking.',
-    aliases: [
-      'creatine monohydrate',
-      'creatine',
-      'creatine hcl',
-      'creatine ethyl',
-    ],
-    isNitrogenCompound: true,
-  ),
-  _IngredientRule(
-    name: 'Beta-Alanine',
-    category: 'Amino Spiking Agent',
-    explanation:
-        'Non-essential amino acid that contributes nitrogen to protein tests '
-        'without being a quality protein source.',
-    aliases: ['beta-alanine', 'beta alanine', 'β-alanine'],
-    isNitrogenCompound: true,
-  ),
-  _IngredientRule(
-    name: 'L-Glutamine',
-    category: 'Amino Spiking Agent',
-    explanation:
-        'Free amino acid sometimes added in excess to boost nitrogen content. '
-        'While it has some gut-health benefits, large amounts suggest spiking.',
-    aliases: ['l-glutamine', 'glutamine', 'l glutamine'],
-    isNitrogenCompound: true,
-  ),
-  _IngredientRule(
-    name: 'Arginine',
-    category: 'Amino Spiking Agent',
-    explanation:
-        'Free-form amino acid used to boost nitrogen scores. '
-        'At high doses it is more indicative of spiking than a benefit.',
-    aliases: ['arginine', 'l-arginine', 'l arginine', 'arginine akg'],
-    isNitrogenCompound: true,
-  ),
-  _IngredientRule(
-    name: 'Alanine',
-    category: 'Amino Spiking Agent',
-    explanation:
-        'Cheap non-essential amino acid used to inflate protein readings.',
-    aliases: ['alanine', 'l-alanine', 'l alanine'],
-    isNitrogenCompound: true,
-  ),
-  _IngredientRule(
-    name: 'Leucine',
-    category: 'Amino Spiking Agent / BCAA',
-    explanation:
-        'While leucine is a branched-chain amino acid with real benefit, '
-        'excessive free-form leucine on a label can indicate spiking.',
-    aliases: ['leucine', 'l-leucine', 'l leucine'],
-    isNitrogenCompound: true,
-  ),
-  _IngredientRule(
-    name: 'Sucralose',
-    category: 'Artificial Sweetener',
-    explanation:
-        'Zero-calorie chlorinated sugar. Common in protein powders. '
-        'Some consumers prefer to avoid it.',
-    aliases: ['sucralose', 'splenda'],
-  ),
-  _IngredientRule(
-    name: 'Acesulfame Potassium',
-    category: 'Artificial Sweetener',
-    explanation:
-        'Also listed as Ace-K or E950. Often used alongside sucralose.',
-    aliases: [
-      'acesulfame potassium',
-      'acesulfame-k',
-      'ace-k',
-      'acesulfame k',
-      'e950',
-    ],
-  ),
-  _IngredientRule(
-    name: 'Aspartame',
-    category: 'Artificial Sweetener',
-    explanation:
-        'Common artificial sweetener. Should be avoided by people with PKU.',
-    aliases: ['aspartame', 'nutrasweet', 'equal'],
-  ),
-  _IngredientRule(
-    name: 'Maltodextrin',
-    category: 'Filler / High GI Carbohydrate',
-    explanation:
-        'High-glycaemic carbohydrate often used as a filler or flavour carrier.',
-    aliases: ['maltodextrin'],
-  ),
-  _IngredientRule(
-    name: 'Soy Lecithin',
-    category: 'Emulsifier',
-    explanation:
-        'Common emulsifier. Possible concern for those with soy allergies.',
-    aliases: ['soy lecithin', 'soya lecithin'],
-  ),
-];
-
-// ── DetectedIngredient ────────────────────────────────────────────────────
-
-class DetectedIngredient {
-  final String name;
-  final String category;
-  final String explanation;
-  final bool isAmSpiking;
-
-  const DetectedIngredient({
-    required this.name,
-    required this.category,
-    required this.explanation,
-    required this.isAmSpiking,
-  });
 }
 
 // ── ScanViewModel ─────────────────────────────────────────────────────────
@@ -258,6 +113,11 @@ class ScanViewModel extends ChangeNotifier {
   // presentation instead of the full ML-confidence wording.
   bool ingredientManuallyEdited = false;
 
+  // The last deterministic rule-based check, kept around for anything that
+  // wants the raw AuthenticityCheck object (e.g. AuthenticityVerdictCard)
+  // rather than the individual fields above.
+  AuthenticityCheck? lastAuthenticityCheck;
+
   // ── Derived verdict (FIX #3) ──────────────────────────────────────────
   // A single source of truth for the verdict UI — replaces scattered string
   // comparisons spread across widgets.
@@ -311,30 +171,29 @@ class ScanViewModel extends ChangeNotifier {
     return _allowedExtensions.any((ext) => path.endsWith(ext));
   }
 
-  // ── Manual re-analysis after the user edits ingredients ────────────────
+  // ── Manual re-analysis after the user edits ANY field ───────────────────
   //
-  // Called from the confirm sheet whenever the user finishes editing the
-  // ingredient text field. This is a deterministic, rule-based check (not
-  // the ML model) — it scans the edited text for known nitrogen-containing
-  // compounds that are commonly used for amino/nitrogen spiking. If any are
-  // present the verdict flips to Non-Authentic; otherwise Authentic.
+  // Called from the confirm sheet (via AuthenticityReanalysisMixin)
+  // whenever the user edits ingredients or any nutrient field. Delegates
+  // entirely to IngredientAuthenticityService — the same deterministic,
+  // rule-based nitrogen-compound scan used by food history — so both
+  // screens behave identically.
 
   void updateIngredientsAndReanalyze(String editedText) {
-    final trimmed = editedText.trim();
+    final check = IngredientAuthenticityService.check(editedText);
 
     ingredientManuallyEdited = true;
+    lastAuthenticityCheck = check;
 
     if (extractedResult != null) {
-      extractedResult = extractedResult!.copyWith(ingredientText: trimmed);
+      extractedResult = extractedResult!.copyWith(
+        ingredientText: check.ingredientText,
+      );
     }
 
-    final nitrogenHits = _detectNitrogenCompounds(trimmed);
-    // Keep the full detected-ingredient list (nitrogen + sweeteners/fillers)
-    // in sync so the "Flagged Ingredients" panel still reflects the edit.
-    detectedIngredients = _detectIngredients(trimmed);
-
-    hasSuspiciousIngredients = nitrogenHits.isNotEmpty;
-    aiLabel = hasSuspiciousIngredients ? 'Spiked' : 'Authentic';
+    detectedIngredients = check.allDetected;
+    hasSuspiciousIngredients = check.isNonAuthentic;
+    aiLabel = check.isNonAuthentic ? 'Spiked' : 'Authentic';
     // Rule-based checks are deterministic, so we treat this as full
     // confidence rather than routing through the ML confidence gate.
     aiConfidence = 1.0;
@@ -343,32 +202,6 @@ class ScanViewModel extends ChangeNotifier {
     errorMessage = null;
 
     notifyListeners();
-  }
-
-  // Scans the given ingredient text for nitrogen-containing compounds known
-  // to be used for amino/nitrogen spiking (e.g. free-form amino acids,
-  // creatine). Returns the matched rules.
-  List<DetectedIngredient> _detectNitrogenCompounds(String ingredientText) {
-    if (ingredientText.isEmpty) return [];
-    final lower = ingredientText.toLowerCase();
-    final found = <DetectedIngredient>[];
-    for (final rule in _ingredientDatabase) {
-      if (!rule.isNitrogenCompound) continue;
-      for (final alias in rule.aliases) {
-        if (lower.contains(alias)) {
-          found.add(
-            DetectedIngredient(
-              name: rule.name,
-              category: rule.category,
-              explanation: rule.explanation,
-              isAmSpiking: true,
-            ),
-          );
-          break;
-        }
-      }
-    }
-    return found;
   }
 
   // ── Multi-angle scan pipeline ─────────────────────────────────────────
@@ -522,7 +355,9 @@ class ScanViewModel extends ChangeNotifier {
         fullOcr: scannedText ?? '',
         allLines: scannedLines,
       );
-      detectedIngredients = _detectIngredients(textForDetection);
+      detectedIngredients = IngredientAuthenticityService.detectAll(
+        textForDetection,
+      );
 
       // Stage 5 – AI inference
       _setStage(ScanStage.generatingInsights);
@@ -700,7 +535,9 @@ class ScanViewModel extends ChangeNotifier {
         fullOcr: scannedText ?? '',
         allLines: scannedLines,
       );
-      detectedIngredients = _detectIngredients(textForDetection);
+      detectedIngredients = IngredientAuthenticityService.detectAll(
+        textForDetection,
+      );
 
       _setStage(ScanStage.generatingInsights);
       await Future<void>.microtask(() {});
@@ -903,28 +740,6 @@ class ScanViewModel extends ChangeNotifier {
     return double.tryParse(match.group(1) ?? '');
   }
 
-  List<DetectedIngredient> _detectIngredients(String ingredientText) {
-    if (ingredientText.isEmpty) return [];
-    final lower = ingredientText.toLowerCase();
-    final found = <DetectedIngredient>[];
-    for (final rule in _ingredientDatabase) {
-      for (final alias in rule.aliases) {
-        if (lower.contains(alias)) {
-          found.add(
-            DetectedIngredient(
-              name: rule.name,
-              category: rule.category,
-              explanation: rule.explanation,
-              isAmSpiking: rule.category.contains('Amino Spiking'),
-            ),
-          );
-          break;
-        }
-      }
-    }
-    return found;
-  }
-
   // ── Save ──────────────────────────────────────────────────────────────
 
   Future<bool> saveScanResult({
@@ -958,6 +773,17 @@ class ScanViewModel extends ChangeNotifier {
         servingUnit: confirmed.servingUnit,
         sugar: confirmed.sugar,
         sodium: confirmed.sodium,
+        // Supplement compounds + ingredient text carried over so the
+        // history edit screen has the same fields, and can re-run the
+        // same Authentic / Non-Authentic check later.
+        creatineMonohydrate: confirmed.creatineMonohydrate,
+        bcaa: confirmed.bcaa,
+        leucine: confirmed.leucine,
+        isoleucine: confirmed.isoleucine,
+        valine: confirmed.valine,
+        glutamine: confirmed.glutamine,
+        taurine: confirmed.taurine,
+        ingredientText: confirmed.ingredientText,
         imagePath: scannedImageFile?.path,
         scanConfidence: confirmed.extractionConfidence,
         scanAnalysisResult: analysisResult,
@@ -971,9 +797,9 @@ class ScanViewModel extends ChangeNotifier {
         brandName: brandName.trim(),
         productName: log.foodLogName,
         calories: log.calorieIntake,
-        protein: log.protein ?? 0,
-        carbs: log.carbs ?? 0,
-        fat: log.fats ?? 0,
+        protein: log.protein,
+        carbs: log.carbs,
+        fat: log.fats,
         sugar: log.sugar,
         sodium: log.sodium,
         servingSize: log.servingSize,
@@ -1013,10 +839,7 @@ class ScanViewModel extends ChangeNotifier {
 
   String _buildAnalysisResult() {
     if (ingredientManuallyEdited) {
-      final pct = '${(aiConfidence * 100).toStringAsFixed(0)}%';
-      return hasSuspiciousIngredients
-          ? 'NON-AUTHENTIC ($pct)'
-          : 'AUTHENTIC ($pct)';
+      return hasSuspiciousIngredients ? 'NON-AUTHENTIC' : 'AUTHENTIC';
     }
     final pct = '${(aiConfidence * 100).toStringAsFixed(0)}%';
     switch (aiLabel) {
@@ -1078,6 +901,7 @@ class ScanViewModel extends ChangeNotifier {
     lowAiConfidence = false;
     geminiUsed = false;
     ingredientManuallyEdited = false;
+    lastAuthenticityCheck = null;
     scannedImageFile = imageFile;
     notifyListeners();
   }
@@ -1101,6 +925,7 @@ class ScanViewModel extends ChangeNotifier {
     lowAiConfidence = false;
     geminiUsed = false;
     ingredientManuallyEdited = false;
+    lastAuthenticityCheck = null;
     scannedImageFile = null;
     currentStage = ScanStage.idle;
     isScanning = false;

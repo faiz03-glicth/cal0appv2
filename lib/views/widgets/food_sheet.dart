@@ -4,15 +4,18 @@ import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/models/foodlog_model.dart';
 import 'package:cal0appv2/models/off_food_result.dart';
 import 'package:cal0appv2/services/cache/recent_food_cache.dart';
+import 'package:cal0appv2/services/scan/ingredient_authenticity_service.dart';
 import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 import 'package:cal0appv2/viewModels/health/health_warning_viewmodel.dart';
+import 'package:cal0appv2/viewModels/mixins/authenticity_reanalysis_mixin.dart';
 import 'package:cal0appv2/views/widgets/app_text_field.dart';
 import 'package:cal0appv2/views/widgets/app_primary_button.dart';
 import 'package:cal0appv2/views/widgets/app_message_banner.dart';
 import 'package:cal0appv2/views/widgets/app_bottom_sheet.dart';
 import 'package:cal0appv2/views/widgets/app_pill_chip.dart';
 import 'package:cal0appv2/views/widgets/health_warning_dialog.dart';
+import 'package:cal0appv2/views/widgets/supplement_mode_section.dart';
 
 class FoodSheet extends StatefulWidget {
   final bool isEdit;
@@ -23,7 +26,8 @@ class FoodSheet extends StatefulWidget {
   State<FoodSheet> createState() => _FoodSheetState();
 }
 
-class _FoodSheetState extends State<FoodSheet> {
+class _FoodSheetState extends State<FoodSheet>
+    with AuthenticityReanalysisMixin {
   late final TextEditingController _searchCtrl;
   late final TextEditingController _nameCtrl;
   late final TextEditingController _calCtrl;
@@ -31,7 +35,19 @@ class _FoodSheetState extends State<FoodSheet> {
   late final TextEditingController _carbsCtrl;
   late final TextEditingController _fatCtrl;
   late final TextEditingController _servingCtrl;
+  // Supplements — same shared fields the SupplementModeSection widget
+  // renders identically on every food edit screen.
+  late final TextEditingController _ingredientCtrl;
+  late final TextEditingController _creatineCtrl;
+  late final TextEditingController _bcaaCtrl;
+  late final TextEditingController _leucineCtrl;
+  late final TextEditingController _isoleucineCtrl;
+  late final TextEditingController _valineCtrl;
+  late final TextEditingController _glutamineCtrl;
+  late final TextEditingController _taurineCtrl;
   late FoodLogViewModel _foodLogVm;
+
+  AuthenticityCheck? _liveCheck;
 
   @override
   void initState() {
@@ -54,14 +70,66 @@ class _FoodSheetState extends State<FoodSheet> {
     _servingCtrl = TextEditingController(
       text: _foodLogVm.servingGrams.toStringAsFixed(0),
     );
+    _ingredientCtrl = TextEditingController(text: _foodLogVm.ingredientText);
+    _creatineCtrl = TextEditingController(
+      text: _fmt(_foodLogVm.creatineMonohydrate),
+    );
+    _bcaaCtrl = TextEditingController(text: _fmt(_foodLogVm.bcaa));
+    _leucineCtrl = TextEditingController(text: _fmt(_foodLogVm.leucine));
+    _isoleucineCtrl = TextEditingController(text: _fmt(_foodLogVm.isoleucine));
+    _valineCtrl = TextEditingController(text: _fmt(_foodLogVm.valine));
+    _glutamineCtrl = TextEditingController(text: _fmt(_foodLogVm.glutamine));
+    _taurineCtrl = TextEditingController(text: _fmt(_foodLogVm.taurine));
+
+    // Same shared behavior as every other edit screen: editing the
+    // ingredient list or any supplement-compound field debounces then
+    // re-runs the Authentic / Non-Authentic check. ingredientTextForReanalysis
+    // returns '' while Supplements mode is off, so nothing runs then.
+    watchFieldsForReanalysis([
+      _ingredientCtrl,
+      _creatineCtrl,
+      _bcaaCtrl,
+      _leucineCtrl,
+      _isoleucineCtrl,
+      _valineCtrl,
+      _glutamineCtrl,
+      _taurineCtrl,
+    ]);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _foodLogVm.loadRecentFoods();
+      // Show a result immediately on edit if Supplements mode was already
+      // on for this entry, rather than waiting for an edit.
+      runReanalysisNow();
     });
+  }
+
+  static String _fmt(double v) => v == 0 ? '' : v.toString();
+
+  // ── AuthenticityReanalysisMixin wiring ──────────────────────────────────
+
+  @override
+  String get ingredientTextForReanalysis =>
+      _foodLogVm.isSupplementMode ? _ingredientCtrl.text : '';
+
+  @override
+  void onAuthenticityChecked(AuthenticityCheck result) {
+    if (!mounted) return;
+    setState(() => _liveCheck = result);
+  }
+
+  void _onSupplementModeChanged(bool v) {
+    _foodLogVm.setSupplementMode(v);
+    if (v) {
+      runReanalysisNow();
+    } else {
+      setState(() => _liveCheck = null);
+    }
   }
 
   @override
   void dispose() {
+    disposeAuthenticityReanalysis();
     _foodLogVm.cancelSearch();
     _searchCtrl.dispose();
     _nameCtrl.dispose();
@@ -70,6 +138,14 @@ class _FoodSheetState extends State<FoodSheet> {
     _carbsCtrl.dispose();
     _fatCtrl.dispose();
     _servingCtrl.dispose();
+    _ingredientCtrl.dispose();
+    _creatineCtrl.dispose();
+    _bcaaCtrl.dispose();
+    _leucineCtrl.dispose();
+    _isoleucineCtrl.dispose();
+    _valineCtrl.dispose();
+    _glutamineCtrl.dispose();
+    _taurineCtrl.dispose();
     super.dispose();
   }
 
@@ -135,6 +211,31 @@ class _FoodSheetState extends State<FoodSheet> {
     return AppBottomSheet(
       title: widget.isEdit ? 'Edit Food' : 'Log Food',
       children: [
+        // ── The one shared Supplements block — toggle, ingredients,
+        // supplement compounds, live verdict card. Identical widget to
+        // the one used on the food history edit sheet.
+        SupplementModeSection(
+          isSupplementMode: vm.isSupplementMode,
+          onToggle: _onSupplementModeChanged,
+          ingredientCtrl: _ingredientCtrl,
+          creatineCtrl: _creatineCtrl,
+          bcaaCtrl: _bcaaCtrl,
+          leucineCtrl: _leucineCtrl,
+          isoleucineCtrl: _isoleucineCtrl,
+          valineCtrl: _valineCtrl,
+          glutamineCtrl: _glutamineCtrl,
+          taurineCtrl: _taurineCtrl,
+          liveCheck: _liveCheck,
+          onCreatineChanged: vm.updateCreatineMonohydrate,
+          onBcaaChanged: vm.updateBcaa,
+          onLeucineChanged: vm.updateLeucine,
+          onIsoleucineChanged: vm.updateIsoleucine,
+          onValineChanged: vm.updateValine,
+          onGlutamineChanged: vm.updateGlutamine,
+          onTaurineChanged: vm.updateTaurine,
+        ),
+        const SizedBox(height: AppSpacing.lg),
+
         // ── Mode toggle ────────────────────────────────────────────────
         if (!widget.isEdit) ...[
           Row(
@@ -644,11 +745,8 @@ class _IncompleteBadge extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Manual form — redesigned to match food_detail_view edit sheet style:
-//   • No icons in any AppTextField
-//   • label: above every field
-//   • unit in hint: (g / kcal / mg)
-//   • macros in two-column pairs, not a cramped three-column row
+// Manual form — supplement fields removed; they now live in the shared
+// SupplementModeSection rendered above this form.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _ManualForm extends StatelessWidget {
@@ -685,8 +783,7 @@ class _ManualForm extends StatelessWidget {
     String h1,
     TextEditingController c2,
     String l2,
-    String h2,
-    FoodLogViewModel vm_, {
+    String h2, {
     void Function(String)? on1,
     void Function(String)? on2,
   }) {
@@ -824,7 +921,6 @@ class _ManualForm extends StatelessWidget {
           carbsCtrl,
           'Carbs',
           'g',
-          vm,
           on1: vm.updateProtein,
           on2: vm.updateCarbs,
         ),

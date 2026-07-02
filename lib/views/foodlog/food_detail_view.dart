@@ -6,167 +6,51 @@ import 'package:cal0appv2/views/theme/app_theme.dart';
 import 'package:cal0appv2/models/foodlog_model.dart';
 import 'package:cal0appv2/viewModels/foodlog/food_history_viewmodel.dart';
 import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
+import 'package:cal0appv2/viewModels/mixins/authenticity_reanalysis_mixin.dart';
+import 'package:cal0appv2/services/scan/ingredient_authenticity_service.dart';
 import 'package:cal0appv2/views/widgets/app_card.dart';
 import 'package:cal0appv2/views/widgets/app_text_field.dart';
 import 'package:cal0appv2/views/widgets/app_primary_button.dart';
 import 'package:cal0appv2/views/widgets/macro_progress_bar.dart';
 import 'package:cal0appv2/views/widgets/source_badge.dart';
+import 'package:cal0appv2/views/widgets/authenticity_verdict_card.dart';
+import 'package:cal0appv2/views/widgets/supplement_mode_section.dart';
 
-enum _Verdict { authentic, spiked, plantBased, unknown }
+// ── Legacy verdict parsing ──────────────────────────────────────────────────
+// Older logs (saved before ingredientText existed, or saved from the ML
+// model rather than a manual edit) only have a summary string like
+// "SPIKED (82%)" in scanAnalysisResult. We keep this parser around purely
+// to show that original AI verdict as a fallback when there's no
+// ingredientText to run the real (shared) rule-based check against.
 
-class _ParsedVerdict {
-  final _Verdict verdict;
+enum _LegacyVerdict { authentic, spiked, plantBased, unknown }
+
+class _ParsedLegacyVerdict {
+  final _LegacyVerdict verdict;
   final double confidence; // 0–1, 0 if not stored
-  const _ParsedVerdict(this.verdict, this.confidence);
+  const _ParsedLegacyVerdict(this.verdict, this.confidence);
 
-  static _ParsedVerdict from(String? raw) {
-    if (raw == null || raw.isEmpty)
-      return const _ParsedVerdict(_Verdict.unknown, 0);
+  static _ParsedLegacyVerdict from(String? raw) {
+    if (raw == null || raw.isEmpty) {
+      return const _ParsedLegacyVerdict(_LegacyVerdict.unknown, 0);
+    }
     final upper = raw.toUpperCase();
     final confMatch = RegExp(r'(\d+)%').firstMatch(raw);
     final conf = confMatch != null
         ? (int.tryParse(confMatch.group(1) ?? '0') ?? 0) / 100.0
         : 0.0;
 
-    if (upper.contains('SPIKED')) return _ParsedVerdict(_Verdict.spiked, conf);
-    if (upper.contains('PLANT'))
-      return _ParsedVerdict(_Verdict.plantBased, conf);
-    if (upper.contains('AUTHENTIC'))
-      return _ParsedVerdict(_Verdict.authentic, conf);
-    return _ParsedVerdict(_Verdict.unknown, conf);
+    if (upper.contains('NON-AUTHENTIC') || upper.contains('SPIKED')) {
+      return _ParsedLegacyVerdict(_LegacyVerdict.spiked, conf);
+    }
+    if (upper.contains('PLANT')) {
+      return _ParsedLegacyVerdict(_LegacyVerdict.plantBased, conf);
+    }
+    if (upper.contains('AUTHENTIC')) {
+      return _ParsedLegacyVerdict(_LegacyVerdict.authentic, conf);
+    }
+    return _ParsedLegacyVerdict(_LegacyVerdict.unknown, conf);
   }
-}
-
-// ── Rule-based ingredient detection (mirrors scan_viewmodel.dart) ─────────────
-// Kept local so food_detail_view has no dependency on ScanViewModel at runtime.
-
-class _DetectedIng {
-  final String name;
-  final String category;
-  final String explanation;
-  final bool isAmSpiking;
-  const _DetectedIng({
-    required this.name,
-    required this.category,
-    required this.explanation,
-    required this.isAmSpiking,
-  });
-}
-
-const _ingDatabase = [
-  _DetectedIng(
-    name: 'Glycine',
-    category: 'Amino Spiking Agent',
-    isAmSpiking: true,
-    explanation:
-        'Cheap amino acid that inflates lab protein tests without real muscle benefit.',
-  ),
-  _DetectedIng(
-    name: 'Taurine',
-    category: 'Amino Spiking Agent',
-    isAmSpiking: true,
-    explanation:
-        'Registers as protein on Kjeldahl tests but does not contribute to MPS.',
-  ),
-  _DetectedIng(
-    name: 'Creatine Monohydrate',
-    category: 'Potential Spiking Agent',
-    isAmSpiking: true,
-    explanation:
-        'Contains nitrogen — can inflate protein readings. Legitimate supplement but suspicious in protein powder.',
-  ),
-  _DetectedIng(
-    name: 'Beta-Alanine',
-    category: 'Amino Spiking Agent',
-    isAmSpiking: true,
-    explanation:
-        'Non-essential amino acid that contributes nitrogen without being a quality protein source.',
-  ),
-  _DetectedIng(
-    name: 'L-Glutamine',
-    category: 'Amino Spiking Agent',
-    isAmSpiking: true,
-    explanation:
-        'Free amino acid sometimes added in excess to boost nitrogen content.',
-  ),
-  _DetectedIng(
-    name: 'Arginine',
-    category: 'Amino Spiking Agent',
-    isAmSpiking: true,
-    explanation: 'Free-form amino acid used to boost nitrogen scores.',
-  ),
-  _DetectedIng(
-    name: 'Alanine',
-    category: 'Amino Spiking Agent',
-    isAmSpiking: true,
-    explanation:
-        'Cheap non-essential amino acid used to inflate protein readings.',
-  ),
-  _DetectedIng(
-    name: 'Leucine',
-    category: 'Amino Spiking Agent / BCAA',
-    isAmSpiking: true,
-    explanation:
-        'Excess free-form leucine on a protein label can indicate spiking.',
-  ),
-  _DetectedIng(
-    name: 'Sucralose',
-    category: 'Artificial Sweetener',
-    isAmSpiking: false,
-    explanation: 'Zero-calorie chlorinated sugar. Common in protein powders.',
-  ),
-  _DetectedIng(
-    name: 'Acesulfame Potassium',
-    category: 'Artificial Sweetener',
-    isAmSpiking: false,
-    explanation:
-        'Also listed as Ace-K or E950. Often used alongside sucralose.',
-  ),
-  _DetectedIng(
-    name: 'Aspartame',
-    category: 'Artificial Sweetener',
-    isAmSpiking: false,
-    explanation: 'Common artificial sweetener. Avoid if you have PKU.',
-  ),
-  _DetectedIng(
-    name: 'Maltodextrin',
-    category: 'Filler / High GI Carb',
-    isAmSpiking: false,
-    explanation: 'High-glycaemic carbohydrate often used as a filler.',
-  ),
-  _DetectedIng(
-    name: 'Soy Lecithin',
-    category: 'Emulsifier',
-    isAmSpiking: false,
-    explanation: 'Common emulsifier. Concern for those with soy allergies.',
-  ),
-];
-
-const _ingAliases = {
-  'Glycine': ['glycine'],
-  'Taurine': ['taurine'],
-  'Creatine Monohydrate': ['creatine monohydrate', 'creatine', 'creatine hcl'],
-  'Beta-Alanine': ['beta-alanine', 'beta alanine'],
-  'L-Glutamine': ['l-glutamine', 'glutamine'],
-  'Arginine': ['arginine', 'l-arginine'],
-  'Alanine': ['alanine', 'l-alanine'],
-  'Leucine': ['leucine', 'l-leucine'],
-  'Sucralose': ['sucralose'],
-  'Acesulfame Potassium': ['acesulfame potassium', 'acesulfame-k', 'ace-k'],
-  'Aspartame': ['aspartame'],
-  'Maltodextrin': ['maltodextrin'],
-  'Soy Lecithin': ['soy lecithin', 'soya lecithin'],
-};
-
-List<_DetectedIng> _detectIngredients(String text) {
-  if (text.isEmpty) return [];
-  final lower = text.toLowerCase();
-  final found = <_DetectedIng>[];
-  for (final ing in _ingDatabase) {
-    final aliases = _ingAliases[ing.name] ?? [];
-    if (aliases.any((a) => lower.contains(a))) found.add(ing);
-  }
-  return found;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -193,14 +77,16 @@ class _FoodDetailViewState extends State<FoodDetailView> {
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
-    final parsed = _ParsedVerdict.from(_log.scanAnalysisResult);
 
-    // Ingredient text is stored in scanAnalysisResult for legacy logs,
-    // or may not be stored at all — we do our best with what we have.
-    // The rule-based detector runs on the raw scanAnalysisResult string
-    // so even old logs get ingredient chips if the text was saved.
-    final ingredientSource = _log.scanAnalysisResult ?? '';
-    final detectedIngs = _detectIngredients(ingredientSource);
+    // If this log has ingredient text saved (either from the scan flow or
+    // a manual edit), run the SAME shared nitrogen-compound check the live
+    // scan uses — this is what makes history behave identically to the
+    // live scan instead of drifting with its own logic.
+    final hasIngredientText = _log.ingredientText.trim().isNotEmpty;
+    final authenticityCheck = hasIngredientText
+        ? IngredientAuthenticityService.check(_log.ingredientText)
+        : null;
+    final legacy = _ParsedLegacyVerdict.from(_log.scanAnalysisResult);
 
     return Scaffold(
       backgroundColor: c.background,
@@ -217,6 +103,8 @@ class _FoodDetailViewState extends State<FoodDetailView> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          // The one shared edit-button entry point — identical icon/action
+          // to what a user would tap on the live scan confirm sheet.
           IconButton(
             icon: const Icon(
               Icons.edit,
@@ -294,13 +182,16 @@ class _FoodDetailViewState extends State<FoodDetailView> {
             ),
             const SizedBox(height: AppSpacing.md),
 
-            // ── AI verdict card (scanned only) ────────────────────
-            if (_log.isScanned && _log.scanAnalysisResult != null) ...[
-              _AiVerdictSection(
-                parsed: parsed,
-                detectedIngredients: detectedIngs,
-                rawResult: _log.scanAnalysisResult!,
-              ),
+            // ── AI verdict card ────────────────────────────────────
+            // Uses the exact same AuthenticityVerdictCard as the live scan
+            // confirm sheet whenever we have ingredient text to check.
+            // Falls back to the legacy parsed-string display only for old
+            // logs that never had ingredientText saved.
+            if (authenticityCheck != null) ...[
+              AuthenticityVerdictCard(check: authenticityCheck),
+              const SizedBox(height: AppSpacing.md),
+            ] else if (_log.isScanned && _log.scanAnalysisResult != null) ...[
+              _LegacyVerdictCard(legacy: legacy),
               const SizedBox(height: AppSpacing.md),
             ],
 
@@ -433,6 +324,22 @@ class _FoodDetailViewState extends State<FoodDetailView> {
                       unit: 'mg',
                       color: const Color(0xFF78716C),
                     ),
+                  if (_log.creatineMonohydrate > 0)
+                    MacroProgressBar(
+                      label: 'Creatine Mono.',
+                      value: _log.creatineMonohydrate,
+                      max: 5,
+                      unit: 'g',
+                      color: const Color(0xFF7C3AED),
+                    ),
+                  if (_log.bcaa > 0)
+                    MacroProgressBar(
+                      label: 'Total BCAAs',
+                      value: _log.bcaa,
+                      max: 10,
+                      unit: 'g',
+                      color: const Color(0xFF0284C7),
+                    ),
                 ],
               ),
             ),
@@ -452,7 +359,6 @@ class _FoodDetailViewState extends State<FoodDetailView> {
         onSaved: (updated) async {
           final uid = context.read<AuthViewModel>().currentUid ?? '';
           await context.read<FoodHistoryViewModel>().update(uid, updated);
-          // Rebuild the verdict section with updated log
           setState(() => _log = updated);
         },
       ),
@@ -460,591 +366,125 @@ class _FoodDetailViewState extends State<FoodDetailView> {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// AI Verdict Section  — the full breakdown card
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Legacy verdict card (only shown when there's no ingredientText) ────────
 
-class _AiVerdictSection extends StatefulWidget {
-  final _ParsedVerdict parsed;
-  final List<_DetectedIng> detectedIngredients;
-  final String rawResult;
+class _LegacyVerdictCard extends StatelessWidget {
+  final _ParsedLegacyVerdict legacy;
+  const _LegacyVerdictCard({required this.legacy});
 
-  const _AiVerdictSection({
-    required this.parsed,
-    required this.detectedIngredients,
-    required this.rawResult,
-  });
-
-  @override
-  State<_AiVerdictSection> createState() => _AiVerdictSectionState();
-}
-
-class _AiVerdictSectionState extends State<_AiVerdictSection> {
-  bool _showIngredients = true;
+  _LegacyStyle _style(C0Colors c) {
+    switch (legacy.verdict) {
+      case _LegacyVerdict.authentic:
+        return _LegacyStyle(
+          bg: const Color(0xFFECFDF5),
+          border: const Color(0xFF22C55E),
+          accent: const Color(0xFF16A34A),
+          icon: Icons.shield_rounded,
+          headline: 'Looks Authentic ✓',
+          sub: 'No amino spiking detected',
+        );
+      case _LegacyVerdict.spiked:
+        return _LegacyStyle(
+          bg: const Color(0xFFFEF2F2),
+          border: const Color(0xFFEF4444),
+          accent: const Color(0xFFDC2626),
+          icon: Icons.dangerous_rounded,
+          headline: '⚠ Spiking Detected',
+          sub: 'Suspicious ingredients found',
+        );
+      case _LegacyVerdict.plantBased:
+        return _LegacyStyle(
+          bg: const Color(0xFFF0FDF4),
+          border: const Color(0xFF4ADE80),
+          accent: const Color(0xFF15803D),
+          icon: Icons.eco_rounded,
+          headline: '🌱 Plant-Based',
+          sub: 'Not whey protein',
+        );
+      case _LegacyVerdict.unknown:
+        return _LegacyStyle(
+          bg: c.card,
+          border: c.divider,
+          accent: c.textSecondary,
+          icon: Icons.help_center_outlined,
+          headline: 'No AI Result',
+          sub: 'Analysis was not recorded',
+        );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
-    final cfg = _verdictConfig(widget.parsed, c);
-    final hasAmSpiking = widget.detectedIngredients.any((d) => d.isAmSpiking);
-    final pct = widget.parsed.confidence > 0
-        ? '${(widget.parsed.confidence * 100).toStringAsFixed(0)}%'
+    final s = _style(c);
+    final pct = legacy.confidence > 0
+        ? '${(legacy.confidence * 100).toStringAsFixed(0)}%'
         : null;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Main verdict card ─────────────────────────────────────
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: cfg.bg,
-            borderRadius: BorderRadius.circular(AppRadius.xl),
-            border: Border.all(color: cfg.border, width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: cfg.border.withValues(alpha: 0.2),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: s.bg,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: s.border, width: 2),
+      ),
+      child: Column(
+        children: [
+          Icon(s.icon, color: s.accent, size: 32),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            s.headline,
+            style: AppTextStyles.title.copyWith(
+              color: s.accent,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-          child: Column(
-            children: [
-              // Top badge bar
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  vertical: AppSpacing.sm,
-                  horizontal: AppSpacing.lg,
-                ),
-                decoration: BoxDecoration(
-                  color: cfg.accent,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(AppRadius.xl - 2),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(cfg.badgeIcon, color: Colors.white, size: 14),
-                    const SizedBox(width: AppSpacing.xs),
-                    Text(
-                      cfg.badge,
-                      style: AppTextStyles.caption.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Body
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                child: Column(
-                  children: [
-                    // Big icon
-                    Container(
-                      width: 68,
-                      height: 68,
-                      decoration: BoxDecoration(
-                        color: cfg.accent.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: cfg.accent.withValues(alpha: 0.3),
-                          width: 2,
-                        ),
-                      ),
-                      child: Icon(cfg.icon, color: cfg.accent, size: 34),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-
-                    Text(
-                      cfg.headline,
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.title.copyWith(
-                        color: cfg.accent,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      pct != null ? '${cfg.sub} · $pct confidence' : cfg.sub,
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.bodyCompact.copyWith(
-                        color: cfg.accent.withValues(alpha: 0.75),
-                      ),
-                    ),
-
-                    // Confidence bar
-                    if (widget.parsed.confidence > 0) ...[
-                      const SizedBox(height: AppSpacing.lg),
-                      _ConfBar(
-                        confidence: widget.parsed.confidence,
-                        color: cfg.accent,
-                      ),
-                    ],
-
-                    // Spiking agents chip list
-                    if (hasAmSpiking) ...[
-                      const SizedBox(height: AppSpacing.md),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        decoration: BoxDecoration(
-                          color: cfg.accent.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(AppRadius.md),
-                          border: Border.all(
-                            color: cfg.accent.withValues(alpha: 0.25),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Detected spiking agents:',
-                              style: AppTextStyles.caption.copyWith(
-                                color: cfg.accent,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            Wrap(
-                              spacing: AppSpacing.xs,
-                              runSpacing: AppSpacing.xs,
-                              children: widget.detectedIngredients
-                                  .where((d) => d.isAmSpiking)
-                                  .map(
-                                    (d) => Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: cfg.accent.withValues(
-                                          alpha: 0.12,
-                                        ),
-                                        borderRadius: BorderRadius.circular(
-                                          AppRadius.pill,
-                                        ),
-                                        border: Border.all(
-                                          color: cfg.accent.withValues(
-                                            alpha: 0.4,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        d.name,
-                                        style: AppTextStyles.micro.copyWith(
-                                          color: cfg.accent,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    // What this means
-                    const SizedBox(height: AppSpacing.md),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: c.background,
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.lightbulb_outline,
-                                size: 13,
-                                color: cfg.accent,
-                              ),
-                              const SizedBox(width: AppSpacing.xs),
-                              Text(
-                                'What this means',
-                                style: AppTextStyles.caption.copyWith(
-                                  color: cfg.accent,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            cfg.explanation,
-                            style: AppTextStyles.caption.copyWith(
-                              color: c.textSecondary,
-                              height: 1.5,
-                            ),
-                          ),
-                          if (widget.parsed.verdict != _Verdict.unknown) ...[
-                            const SizedBox(height: AppSpacing.xs),
-                            Text(
-                              'This is an AI-based estimate from the original scan, not a lab test. '
-                              'Edit the entry above to correct any details.',
-                              style: AppTextStyles.micro.copyWith(
-                                color: c.textSecondary.withValues(alpha: 0.7),
-                                fontStyle: FontStyle.italic,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            pct != null ? '${s.sub} · $pct confidence' : s.sub,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodyCompact.copyWith(
+              color: s.accent.withValues(alpha: 0.75),
+            ),
           ),
-        ),
-
-        // ── Detected ingredient breakdown ─────────────────────────
-        if (widget.detectedIngredients.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.md),
-          _IngredientBreakdown(
-            ingredients: widget.detectedIngredients,
-            expanded: _showIngredients,
-            onToggle: () =>
-                setState(() => _showIngredients = !_showIngredients),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'This entry has no saved ingredient text, so it shows the '
+            'original AI result instead of a re-checkable verdict. Edit the '
+            'entry and add ingredients to enable Authentic / Non-Authentic '
+            're-checks.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.micro.copyWith(
+              color: c.textSecondary,
+              height: 1.4,
+            ),
           ),
         ],
-      ],
+      ),
     );
   }
 }
 
-// ── Verdict config ─────────────────────────────────────────────────────────
-
-class _VConfig {
+class _LegacyStyle {
   final Color bg, border, accent;
-  final IconData badgeIcon, icon;
-  final String badge, headline, sub, explanation;
-  const _VConfig({
+  final IconData icon;
+  final String headline, sub;
+  const _LegacyStyle({
     required this.bg,
     required this.border,
     required this.accent,
-    required this.badgeIcon,
     required this.icon,
-    required this.badge,
     required this.headline,
     required this.sub,
-    required this.explanation,
   });
-}
-
-_VConfig _verdictConfig(_ParsedVerdict p, C0Colors c) {
-  switch (p.verdict) {
-    case _Verdict.authentic:
-      return const _VConfig(
-        bg: Color(0xFFECFDF5),
-        border: Color(0xFF22C55E),
-        accent: Color(0xFF16A34A),
-        badgeIcon: Icons.verified,
-        icon: Icons.shield_rounded,
-        badge: 'AUTHENTIC PRODUCT',
-        headline: 'Looks Authentic ✓',
-        sub: 'No amino spiking detected',
-        explanation:
-            'The AI found no suspicious nitrogen-inflating amino acids in the ingredient list at the time of scanning. This product appeared to be genuine whey.',
-      );
-    case _Verdict.spiked:
-      return const _VConfig(
-        bg: Color(0xFFFEF2F2),
-        border: Color(0xFFEF4444),
-        accent: Color(0xFFDC2626),
-        badgeIcon: Icons.warning_rounded,
-        icon: Icons.dangerous_rounded,
-        badge: 'AMINO SPIKING DETECTED',
-        headline: '⚠ Spiking Detected',
-        sub: 'Suspicious ingredients found',
-        explanation:
-            'The AI detected cheap amino acids commonly used to inflate protein readings on lab tests. These do not provide the same muscle-building benefit as real whey protein.',
-      );
-    case _Verdict.plantBased:
-      return const _VConfig(
-        bg: Color(0xFFF0FDF4),
-        border: Color(0xFF4ADE80),
-        accent: Color(0xFF15803D),
-        badgeIcon: Icons.eco,
-        icon: Icons.eco_rounded,
-        badge: 'PLANT-BASED PROTEIN',
-        headline: '🌱 Plant-Based',
-        sub: 'Not whey protein',
-        explanation:
-            'This product appears to contain plant-based protein (pea, rice, soy, etc.) rather than whey. No amino spiking concern specific to whey, but verify the label matches your goals.',
-      );
-    case _Verdict.unknown:
-      return _VConfig(
-        bg: c.card,
-        border: c.divider,
-        accent: c.textSecondary,
-        badgeIcon: Icons.info_outline,
-        icon: Icons.help_center_outlined,
-        badge: 'RESULT UNAVAILABLE',
-        headline: 'No AI Result',
-        sub: 'Analysis was not recorded',
-        explanation:
-            'No AI verdict was saved for this entry. This may be a manually logged food or a scan from an older version of the app.',
-      );
-  }
-}
-
-// ── Confidence bar ─────────────────────────────────────────────────────────
-
-class _ConfBar extends StatelessWidget {
-  final double confidence;
-  final Color color;
-  const _ConfBar({required this.confidence, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = C0Theme.of(context);
-    final label = confidence >= 0.80
-        ? 'High'
-        : confidence >= 0.50
-        ? 'Moderate'
-        : 'Low';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'AI Confidence',
-              style: AppTextStyles.caption.copyWith(
-                color: c.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Text(
-              '${(confidence * 100).toStringAsFixed(0)}% — $label confidence',
-              style: AppTextStyles.caption.copyWith(
-                color: color,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: confidence.clamp(0.0, 1.0),
-            minHeight: 8,
-            backgroundColor: color.withValues(alpha: 0.15),
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Ingredient breakdown ───────────────────────────────────────────────────
-
-class _IngredientBreakdown extends StatelessWidget {
-  final List<_DetectedIng> ingredients;
-  final bool expanded;
-  final VoidCallback onToggle;
-  const _IngredientBreakdown({
-    required this.ingredients,
-    required this.expanded,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = C0Theme.of(context);
-    final hasAmSpiking = ingredients.any((i) => i.isAmSpiking);
-    final hColor = hasAmSpiking ? c.warning : Colors.orange;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: hColor.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: hColor.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        children: [
-          GestureDetector(
-            onTap: onToggle,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  Icon(
-                    hasAmSpiking ? Icons.warning_rounded : Icons.info_outline,
-                    color: hColor,
-                    size: 18,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          hasAmSpiking
-                              ? 'Suspicious Ingredients'
-                              : 'Notable Ingredients',
-                          style: AppTextStyles.bodyCompact.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: hColor,
-                          ),
-                        ),
-                        Text(
-                          '${ingredients.length} detected from original scan',
-                          style: AppTextStyles.micro.copyWith(
-                            color: c.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    expanded ? Icons.expand_less : Icons.expand_more,
-                    color: c.textSecondary,
-                    size: 18,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 200),
-            crossFadeState: expanded
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
-            firstChild: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                0,
-                AppSpacing.md,
-                AppSpacing.md,
-              ),
-              child: Column(
-                children: ingredients.map((i) => _IngCard(ing: i)).toList(),
-              ),
-            ),
-            secondChild: const SizedBox.shrink(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _IngCard extends StatefulWidget {
-  final _DetectedIng ing;
-  const _IngCard({required this.ing});
-  @override
-  State<_IngCard> createState() => _IngCardState();
-}
-
-class _IngCardState extends State<_IngCard> {
-  bool _show = false;
-  @override
-  Widget build(BuildContext context) {
-    final c = C0Theme.of(context);
-    final bColor = widget.ing.isAmSpiking ? c.warning : Colors.orange;
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: c.background,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: c.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onTap: () => setState(() => _show = !_show),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.sm + 2),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: bColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: Text(
-                      widget.ing.isAmSpiking
-                          ? '⚠ Spiking Agent'
-                          : widget.ing.category,
-                      style: AppTextStyles.micro.copyWith(
-                        color: bColor,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      widget.ing.name,
-                      style: AppTextStyles.bodyCompact.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: c.textPrimary,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    _show ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                    color: c.textSecondary,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 150),
-            crossFadeState: _show
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
-            firstChild: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sm + 2,
-                0,
-                AppSpacing.sm + 2,
-                AppSpacing.sm + 2,
-              ),
-              child: Text(
-                widget.ing.explanation,
-                style: AppTextStyles.caption.copyWith(
-                  color: c.textSecondary,
-                  height: 1.5,
-                ),
-              ),
-            ),
-            secondChild: const SizedBox.shrink(),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Edit sheet (unchanged from existing — all 30 fields + collapsible sections)
+// Edit sheet — now uses the SAME shared edit-button + re-check behavior as
+// the live scan confirm sheet, and the SAME nutrient field set (core
+// macros, extended macros, minerals, vitamins, supplement compounds,
+// ingredients, other).
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _EditSheet extends StatefulWidget {
@@ -1056,7 +496,8 @@ class _EditSheet extends StatefulWidget {
   State<_EditSheet> createState() => _EditSheetState();
 }
 
-class _EditSheetState extends State<_EditSheet> {
+class _EditSheetState extends State<_EditSheet>
+    with AuthenticityReanalysisMixin {
   late final TextEditingController _name;
   late final TextEditingController _calories;
   late final TextEditingController _protein;
@@ -1093,12 +534,29 @@ class _EditSheetState extends State<_EditSheet> {
   late final TextEditingController _waterMl;
   late final TextEditingController _caffeine;
   late final TextEditingController _servingSize;
+  // Supplement compounds — same fields the scan confirm sheet exposes.
+  late final TextEditingController _creatineMonohydrate;
+  late final TextEditingController _bcaa;
+  late final TextEditingController _leucine;
+  late final TextEditingController _isoleucine;
+  late final TextEditingController _valine;
+  late final TextEditingController _glutamine;
+  late final TextEditingController _taurine;
+  // Ingredients — drives the Authentic / Non-Authentic re-check, same as
+  // the scan confirm sheet.
+  late final TextEditingController _ingredientText;
 
   bool _isSaving = false;
   bool _showExtMacros = false;
   bool _showMinerals = false;
   bool _showVitamins = false;
   bool _showOther = false;
+  // Off = Normal Food Logging, On = Whey Supplement — same contract as
+  // FoodLogViewModel.isSupplementMode used by the diary quick-edit sheet.
+  // This was the missing piece: without a toggle here, ingredients were
+  // always shown/saved regardless of intent, and there was no way to know
+  // whether a re-check should even run.
+  bool _isSupplementMode = false;
 
   TextEditingController _c(double v) =>
       TextEditingController(text: v == 0 ? '' : v.toString());
@@ -1151,10 +609,109 @@ class _EditSheetState extends State<_EditSheet> {
           ? l.servingSize.toString()
           : '',
     );
+    _creatineMonohydrate = _c(l.creatineMonohydrate);
+    _bcaa = _c(l.bcaa);
+    _leucine = _c(l.leucine);
+    _isoleucine = _c(l.isoleucine);
+    _valine = _c(l.valine);
+    _glutamine = _c(l.glutamine);
+    _taurine = _c(l.taurine);
+    _ingredientText = TextEditingController(text: l.ingredientText);
+
+    // Restore Supplements state from the saved log, same contract as
+    // FoodLogViewModel.prefillForEdit — a log only counts as a supplement
+    // if it actually has ingredient text or compound amounts saved.
+    _isSupplementMode =
+        l.ingredientText.trim().isNotEmpty ||
+        l.creatineMonohydrate > 0 ||
+        l.bcaa > 0 ||
+        l.leucine > 0 ||
+        l.isoleucine > 0 ||
+        l.valine > 0 ||
+        l.glutamine > 0 ||
+        l.taurine > 0;
+
+    // Same shared behavior as the scan confirm sheet: editing ANY field
+    // here (macros, supplements, or ingredients) debounces then re-runs
+    // the Authentic / Non-Authentic check.
+    watchFieldsForReanalysis([
+      _calories,
+      _protein,
+      _carbs,
+      _fats,
+      _sodium,
+      _fiber,
+      _sugar,
+      _addedSugar,
+      _saturatedFat,
+      _transFat,
+      _unsaturatedFat,
+      _omega3,
+      _omega6,
+      _cholesterol,
+      _potassium,
+      _calcium,
+      _iron,
+      _magnesium,
+      _zinc,
+      _phosphorus,
+      _selenium,
+      _vitaminA,
+      _vitaminB1,
+      _vitaminB2,
+      _vitaminB3,
+      _vitaminB6,
+      _vitaminB12,
+      _vitaminC,
+      _vitaminD,
+      _vitaminE,
+      _vitaminK,
+      _folate,
+      _waterMl,
+      _caffeine,
+      _creatineMonohydrate,
+      _bcaa,
+      _leucine,
+      _isoleucine,
+      _valine,
+      _glutamine,
+      _taurine,
+      _ingredientText,
+    ]);
+
+    // Show a result immediately if there's already ingredient text, rather
+    // than waiting for an edit.
+    WidgetsBinding.instance.addPostFrameCallback((_) => runReanalysisNow());
+  }
+
+  // ── AuthenticityReanalysisMixin wiring ──────────────────────────────────
+  // Local state instead of a ScanViewModel — history has no live scan
+  // session — but it's the exact same mixin, same debounce, same service.
+
+  AuthenticityCheck? _liveCheck;
+
+  @override
+  String get ingredientTextForReanalysis =>
+      _isSupplementMode ? _ingredientText.text : '';
+
+  void _onSupplementModeChanged(bool v) {
+    setState(() => _isSupplementMode = v);
+    if (v) {
+      runReanalysisNow();
+    } else {
+      setState(() => _liveCheck = null);
+    }
+  }
+
+  @override
+  void onAuthenticityChecked(AuthenticityCheck result) {
+    if (!mounted) return;
+    setState(() => _liveCheck = result);
   }
 
   @override
   void dispose() {
+    disposeAuthenticityReanalysis();
     for (final ctrl in [
       _name,
       _calories,
@@ -1192,6 +749,14 @@ class _EditSheetState extends State<_EditSheet> {
       _waterMl,
       _caffeine,
       _servingSize,
+      _creatineMonohydrate,
+      _bcaa,
+      _leucine,
+      _isoleucine,
+      _valine,
+      _glutamine,
+      _taurine,
+      _ingredientText,
     ])
       ctrl.dispose();
     super.dispose();
@@ -1271,6 +836,25 @@ class _EditSheetState extends State<_EditSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // The one shared Supplements block — same widget used on
+                  // the diary quick-edit sheet. Toggle, live verdict
+                  // preview, ingredient field, and compound fields all in
+                  // one place; nothing duplicated here anymore.
+                  SupplementModeSection(
+                    isSupplementMode: _isSupplementMode,
+                    onToggle: _onSupplementModeChanged,
+                    ingredientCtrl: _ingredientText,
+                    creatineCtrl: _creatineMonohydrate,
+                    bcaaCtrl: _bcaa,
+                    leucineCtrl: _leucine,
+                    isoleucineCtrl: _isoleucine,
+                    valineCtrl: _valine,
+                    glutamineCtrl: _glutamine,
+                    taurineCtrl: _taurine,
+                    liveCheck: _liveCheck,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
                   _SLabel(
                     title: 'Required',
                     subtitle: 'Fill in any fields you have',
@@ -1288,6 +872,7 @@ class _EditSheetState extends State<_EditSheet> {
                   const SizedBox(height: AppSpacing.sm),
                   _row2(_fats, 'Fat', 'g', _sodium, 'Sodium', 'mg'),
                   const SizedBox(height: AppSpacing.lg),
+
                   _CSection(
                     title: 'Extended Macros',
                     subtitle: '9 optional fields',
@@ -1455,6 +1040,17 @@ class _EditSheetState extends State<_EditSheet> {
       return;
     }
     setState(() => _isSaving = true);
+
+    // Off = Normal Food Logging: nothing supplement-related gets saved,
+    // even if there's leftover text in the field from before toggling off.
+    // On = Whey Supplement: persist whatever's there and the live check.
+    final ingredientText = _isSupplementMode ? _ingredientText.text.trim() : '';
+    final analysisResult = !_isSupplementMode
+        ? null
+        : (_liveCheck != null
+              ? (_liveCheck!.isNonAuthentic ? 'NON-AUTHENTIC' : 'AUTHENTIC')
+              : null);
+
     final updated = FoodLogModel(
       foodLogID: l.foodLogID,
       userId: l.userId,
@@ -1465,7 +1061,7 @@ class _EditSheetState extends State<_EditSheet> {
       source: l.source,
       imagePath: l.imagePath,
       scanConfidence: l.scanConfidence,
-      scanAnalysisResult: l.scanAnalysisResult,
+      scanAnalysisResult: analysisResult,
       protein: _d(_protein, l.protein),
       carbs: _d(_carbs, l.carbs),
       fats: _d(_fats, l.fats),
@@ -1497,8 +1093,18 @@ class _EditSheetState extends State<_EditSheet> {
       vitaminE: _d(_vitaminE, l.vitaminE),
       vitaminK: _d(_vitaminK, l.vitaminK),
       folate: _d(_folate, l.folate),
+      creatineMonohydrate: _isSupplementMode
+          ? _d(_creatineMonohydrate, l.creatineMonohydrate)
+          : 0,
+      bcaa: _isSupplementMode ? _d(_bcaa, l.bcaa) : 0,
+      leucine: _isSupplementMode ? _d(_leucine, l.leucine) : 0,
+      isoleucine: _isSupplementMode ? _d(_isoleucine, l.isoleucine) : 0,
+      valine: _isSupplementMode ? _d(_valine, l.valine) : 0,
+      glutamine: _isSupplementMode ? _d(_glutamine, l.glutamine) : 0,
+      taurine: _isSupplementMode ? _d(_taurine, l.taurine) : 0,
       waterMl: _d(_waterMl, l.waterMl),
       caffeine: _d(_caffeine, l.caffeine),
+      ingredientText: ingredientText,
       servingSize: _servingSize.text.trim().isEmpty
           ? l.servingSize
           : double.tryParse(_servingSize.text.trim()),

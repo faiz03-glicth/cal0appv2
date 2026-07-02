@@ -47,9 +47,27 @@ class FoodLogModel {
   double vitaminK; // µg
   double folate; // µg DFE
 
+  // ── Supplement compounds ─────────────────────────────────────────────
+  // Same fields exposed on the live scan confirm sheet, added here so
+  // BOTH the scan flow and food history edit screens show the same set
+  // of nutrient fields.
+  double creatineMonohydrate; // g
+  double bcaa; // g (total BCAAs)
+  double leucine; // g
+  double isoleucine; // g
+  double valine; // g
+  double glutamine; // g
+  double taurine; // g
+
   // ── Other ──────────────────────────────────────────────────────────────
   double waterMl; // ml
   double caffeine; // mg
+
+  // ── Ingredients ───────────────────────────────────────────────────────
+  // Raw ingredient list text. This is what powers the Authentic /
+  // Non-Authentic re-check when a history entry is edited — without it
+  // stored, history edits have nothing to re-analyse.
+  String ingredientText;
 
   // ── Metadata ──────────────────────────────────────────────────────────
   FoodLogSource source;
@@ -101,9 +119,19 @@ class FoodLogModel {
     this.vitaminE = 0,
     this.vitaminK = 0,
     this.folate = 0,
+    // Supplement compounds
+    this.creatineMonohydrate = 0,
+    this.bcaa = 0,
+    this.leucine = 0,
+    this.isoleucine = 0,
+    this.valine = 0,
+    this.glutamine = 0,
+    this.taurine = 0,
     // Other
     this.waterMl = 0,
     this.caffeine = 0,
+    // Ingredients
+    this.ingredientText = '',
     // Metadata
     this.source = FoodLogSource.manual,
     this.servingSize,
@@ -168,9 +196,19 @@ class FoodLogModel {
     vitaminE: _d(m, 'vitaminE'),
     vitaminK: _d(m, 'vitaminK'),
     folate: _d(m, 'folate'),
+    // Supplement compounds
+    creatineMonohydrate: _d(m, 'creatineMonohydrate'),
+    bcaa: _d(m, 'bcaa'),
+    leucine: _d(m, 'leucine'),
+    isoleucine: _d(m, 'isoleucine'),
+    valine: _d(m, 'valine'),
+    glutamine: _d(m, 'glutamine'),
+    taurine: _d(m, 'taurine'),
     // Other
     waterMl: _d(m, 'waterMl'),
     caffeine: _d(m, 'caffeine'),
+    // Ingredients
+    ingredientText: m['ingredientText'] ?? '',
     // Metadata
     source: m['source'] == 'scanned'
         ? FoodLogSource.scanned
@@ -224,9 +262,19 @@ class FoodLogModel {
     'vitaminE': vitaminE,
     'vitaminK': vitaminK,
     'folate': folate,
+    // Supplement compounds
+    'creatineMonohydrate': creatineMonohydrate,
+    'bcaa': bcaa,
+    'leucine': leucine,
+    'isoleucine': isoleucine,
+    'valine': valine,
+    'glutamine': glutamine,
+    'taurine': taurine,
     // Other
     'waterMl': waterMl,
     'caffeine': caffeine,
+    // Ingredients
+    'ingredientText': ingredientText,
     // Metadata
     'source': source == FoodLogSource.scanned ? 'scanned' : 'manual',
     'servingSize': servingSize,

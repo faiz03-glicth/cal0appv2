@@ -105,8 +105,11 @@ class WheyVerdictCard extends StatelessWidget {
                   ),
                 ),
 
-                // Confidence bar (only when AI ran)
-                if (verdict != AuthenticityVerdict.unknown) ...[
+                // Confidence bar (only when AI ran, and not for a manual
+                // rule-based re-check — that's deterministic, not a
+                // confidence score).
+                if (verdict != AuthenticityVerdict.unknown &&
+                    !vm.ingredientManuallyEdited) ...[
                   const SizedBox(height: AppSpacing.lg),
                   _ConfidenceBar(
                     confidence: vm.aiConfidence,
@@ -114,7 +117,8 @@ class WheyVerdictCard extends StatelessWidget {
                   ),
                 ],
 
-                // Detected spiking agents summary (only for spiked verdict)
+                // Detected spiking agents summary (only for a non-authentic
+                // / spiked verdict)
                 if (verdict == AuthenticityVerdict.spiked &&
                     vm.detectedIngredients.any((d) => d.isAmSpiking)) ...[
                   const SizedBox(height: AppSpacing.md),
@@ -127,7 +131,11 @@ class WheyVerdictCard extends StatelessWidget {
 
                 // What this means section
                 const SizedBox(height: AppSpacing.md),
-                _WhatThisMeans(verdict: verdict, config: config),
+                _WhatThisMeans(
+                  verdict: verdict,
+                  config: config,
+                  manuallyEdited: vm.ingredientManuallyEdited,
+                ),
               ],
             ),
           ),
@@ -141,6 +149,49 @@ class WheyVerdictCard extends StatelessWidget {
     C0Colors c,
     ScanViewModel vm,
   ) {
+    // ── Manual re-check branch ────────────────────────────────────────
+    // When the user edits the ingredient list, we run a deterministic
+    // nitrogen-compound scan instead of the ML model, and show a plain
+    // Authentic / Non-Authentic result rather than the confidence-scored
+    // wording used for the original AI scan.
+    if (vm.ingredientManuallyEdited) {
+      if (verdict == AuthenticityVerdict.spiked) {
+        return _VerdictConfig(
+          bgColor: const Color(0xFFFEF2F2),
+          borderColor: const Color(0xFFEF4444),
+          accentColor: const Color(0xFFDC2626),
+          badgeIcon: Icons.warning_rounded,
+          badgeText: 'NON-AUTHENTIC',
+          mainIcon: Icons.dangerous_rounded,
+          headline: 'Non-Authentic',
+          subLabel: 'Suspicious nitrogen compound found in your edited ingredients',
+          explanation:
+              'After your edit, the ingredient list contains one or more '
+              'nitrogen-based compounds (e.g. free-form amino acids or '
+              'creatine) that are commonly used to artificially inflate '
+              'protein readings without providing real whey protein.',
+          whatItMeansColor: const Color(0xFFB91C1C),
+        );
+      }
+      // Authentic (or defaults to authentic if aiLabel somehow unset)
+      return _VerdictConfig(
+        bgColor: const Color(0xFFECFDF5),
+        borderColor: const Color(0xFF22C55E),
+        accentColor: const Color(0xFF16A34A),
+        badgeIcon: Icons.verified,
+        badgeText: 'AUTHENTIC',
+        mainIcon: Icons.shield_rounded,
+        headline: 'Authentic',
+        subLabel: 'No suspicious nitrogen compound found in your edited ingredients',
+        explanation:
+            'We checked your edited ingredient list for nitrogen-based '
+            'compounds commonly used to inflate protein readings (e.g. '
+            'free-form amino acids, creatine) and found none. This product '
+            'appears to be genuine.',
+        whatItMeansColor: const Color(0xFF15803D),
+      );
+    }
+
     final pct = '${(vm.aiConfidence * 100).toStringAsFixed(0)}%';
 
     switch (verdict) {
@@ -385,7 +436,12 @@ class _SpikingAgentsSummary extends StatelessWidget {
 class _WhatThisMeans extends StatelessWidget {
   final AuthenticityVerdict verdict;
   final _VerdictConfig config;
-  const _WhatThisMeans({required this.verdict, required this.config});
+  final bool manuallyEdited;
+  const _WhatThisMeans({
+    required this.verdict,
+    required this.config,
+    this.manuallyEdited = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -428,8 +484,13 @@ class _WhatThisMeans extends StatelessWidget {
           if (verdict != AuthenticityVerdict.unknown) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'This is an AI-based estimate, not a laboratory test. '
-              'Always verify with official certification if purchasing in bulk.',
+              manuallyEdited
+                  ? 'This result is based on a rule-based scan of the '
+                        'ingredients you edited, not the original AI model. '
+                        'Always verify with official certification if '
+                        'purchasing in bulk.'
+                  : 'This is an AI-based estimate, not a laboratory test. '
+                        'Always verify with official certification if purchasing in bulk.',
               style: AppTextStyles.micro.copyWith(
                 color: c.textSecondary.withValues(alpha: 0.7),
                 fontStyle: FontStyle.italic,

@@ -298,8 +298,15 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet> {
               const SizedBox(height: AppSpacing.md),
             ],
 
-            if (_ingredientText(vm).isNotEmpty) ...[
-              _IngredientListSection(text: _ingredientText(vm)),
+            if (_ingredientText(vm).isNotEmpty || vm.ingredientManuallyEdited) ...[
+              _IngredientListSection(
+                key: ValueKey(vm.extractedResult?.hashCode),
+                text: _ingredientText(vm),
+                // Edits re-run the nitrogen-compound check and flip the
+                // "Results of AI" card between Authentic / Non-Authentic.
+                onSave: (editedText) =>
+                    vm.updateIngredientsAndReanalyze(editedText),
+              ),
               const SizedBox(height: AppSpacing.md),
             ],
 
@@ -1130,15 +1137,32 @@ class _IngredientCardState extends State<_IngredientCard> {
   }
 }
 
+// ── Ingredient list — now editable ──────────────────────────────────────────
+//
+// Tapping the pencil icon switches from the read-only chip view into an
+// editable multiline text field. Tapping "Done" (or the field losing focus)
+// calls [onSave] with the edited text, which the confirm sheet wires to
+// ScanViewModel.updateIngredientsAndReanalyze(...) — this re-runs the
+// nitrogen-compound check and flips the Results-of-AI card between
+// Authentic / Non-Authentic.
+
 class _IngredientListSection extends StatefulWidget {
   final String text;
-  const _IngredientListSection({required this.text});
+  final ValueChanged<String> onSave;
+  const _IngredientListSection({
+    super.key,
+    required this.text,
+    required this.onSave,
+  });
   @override
   State<_IngredientListSection> createState() => _IngredientListSectionState();
 }
 
 class _IngredientListSectionState extends State<_IngredientListSection> {
-  bool _expanded = false;
+  bool _expanded = true;
+  bool _editing = false;
+  late final TextEditingController _controller;
+
   static const _flagged = [
     'creatine',
     'taurine',
@@ -1153,10 +1177,35 @@ class _IngredientListSectionState extends State<_IngredientListSection> {
     'aspartame',
     'acesulfame',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.text);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _startEditing() {
+    setState(() {
+      _editing = true;
+      _expanded = true;
+    });
+  }
+
+  void _finishEditing() {
+    setState(() => _editing = false);
+    widget.onSave(_controller.text.trim());
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
-    final items = widget.text
+    final items = _controller.text
         .split(RegExp(r'[,;]'))
         .map((s) => s.trim())
         .where((s) => s.length > 1)
@@ -1190,7 +1239,9 @@ class _IngredientListSectionState extends State<_IngredientListSection> {
                           ),
                         ),
                         Text(
-                          '${items.isEmpty ? '?' : items.length} ingredients — tap to view',
+                          _editing
+                              ? 'Editing — tap Done when finished'
+                              : '${items.isEmpty ? '?' : items.length} ingredients — tap to view',
                           style: AppTextStyles.micro.copyWith(
                             color: c.textSecondary,
                           ),
@@ -1198,18 +1249,34 @@ class _IngredientListSectionState extends State<_IngredientListSection> {
                       ],
                     ),
                   ),
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    color: c.textSecondary,
-                    size: 18,
-                  ),
+                  if (!_editing)
+                    IconButton(
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        size: 18,
+                        color: c.primary,
+                      ),
+                      tooltip: 'Edit ingredients',
+                      onPressed: _startEditing,
+                    )
+                  else
+                    TextButton(
+                      onPressed: _finishEditing,
+                      child: const Text('Done'),
+                    ),
+                  if (!_editing)
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      color: c.textSecondary,
+                      size: 18,
+                    ),
                 ],
               ),
             ),
           ),
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 200),
-            crossFadeState: _expanded
+            crossFadeState: (_expanded || _editing)
                 ? CrossFadeState.showFirst
                 : CrossFadeState.showSecond,
             firstChild: Padding(
@@ -1219,41 +1286,66 @@ class _IngredientListSectionState extends State<_IngredientListSection> {
                 AppSpacing.md,
                 AppSpacing.md,
               ),
-              child: Wrap(
-                spacing: AppSpacing.xs,
-                runSpacing: AppSpacing.xs,
-                children: items.map((ing) {
-                  final isFlagged = _flagged.any(
-                    (k) => ing.toLowerCase().contains(k),
-                  );
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isFlagged
-                          ? c.warning.withValues(alpha: 0.10)
-                          : c.card,
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                      border: Border.all(
-                        color: isFlagged
-                            ? c.warning.withValues(alpha: 0.4)
-                            : c.divider,
+              child: _editing
+                  ? TextField(
+                      controller: _controller,
+                      maxLines: 5,
+                      minLines: 3,
+                      style: TextStyle(color: c.textPrimary, fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText:
+                            'e.g. Whey Protein Isolate, Cocoa, Glycine, Sucralose',
+                        hintStyle: TextStyle(
+                          color: c.textSecondary.withValues(alpha: 0.5),
+                        ),
+                        filled: true,
+                        fillColor: c.card,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                          borderSide: BorderSide(color: c.divider),
+                        ),
+                        contentPadding: const EdgeInsets.all(10),
                       ),
+                      onChanged: (_) => setState(() {}),
+                      onSubmitted: (_) => _finishEditing(),
+                    )
+                  : Wrap(
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
+                      children: items.map((ing) {
+                        final isFlagged = _flagged.any(
+                          (k) => ing.toLowerCase().contains(k),
+                        );
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isFlagged
+                                ? c.warning.withValues(alpha: 0.10)
+                                : c.card,
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.pill,
+                            ),
+                            border: Border.all(
+                              color: isFlagged
+                                  ? c.warning.withValues(alpha: 0.4)
+                                  : c.divider,
+                            ),
+                          ),
+                          child: Text(
+                            ing,
+                            style: AppTextStyles.micro.copyWith(
+                              color: isFlagged ? c.warning : c.textPrimary,
+                              fontWeight: isFlagged
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
-                    child: Text(
-                      ing,
-                      style: AppTextStyles.micro.copyWith(
-                        color: isFlagged ? c.warning : c.textPrimary,
-                        fontWeight: isFlagged
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
             ),
             secondChild: const SizedBox.shrink(),
           ),

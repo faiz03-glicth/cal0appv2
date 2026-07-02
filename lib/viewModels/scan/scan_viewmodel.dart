@@ -35,12 +35,17 @@ class _IngredientRule {
   final String category;
   final String explanation;
   final List<String> aliases;
+  // Compounds that contain nitrogen and can distort protein/Kjeldahl-style
+  // readings if free-formed into a supplement. Used for the manual
+  // "re-check after edit" nitrogen-spiking scan.
+  final bool isNitrogenCompound;
 
   const _IngredientRule({
     required this.name,
     required this.category,
     required this.explanation,
     required this.aliases,
+    this.isNitrogenCompound = false,
   });
 }
 
@@ -52,6 +57,7 @@ const _ingredientDatabase = <_IngredientRule>[
         'Cheap amino acid sometimes added to inflate protein content on lab tests. '
         'Does not provide the same muscle-building benefit as whey.',
     aliases: ['glycine'],
+    isNitrogenCompound: true,
   ),
   _IngredientRule(
     name: 'Taurine',
@@ -60,6 +66,7 @@ const _ingredientDatabase = <_IngredientRule>[
         'Free-form amino acid that registers as protein on Kjeldahl/Dumas tests '
         'but is not a complete protein source and does not contribute to MPS.',
     aliases: ['taurine'],
+    isNitrogenCompound: true,
   ),
   _IngredientRule(
     name: 'Creatine Monohydrate',
@@ -74,6 +81,7 @@ const _ingredientDatabase = <_IngredientRule>[
       'creatine hcl',
       'creatine ethyl',
     ],
+    isNitrogenCompound: true,
   ),
   _IngredientRule(
     name: 'Beta-Alanine',
@@ -82,6 +90,7 @@ const _ingredientDatabase = <_IngredientRule>[
         'Non-essential amino acid that contributes nitrogen to protein tests '
         'without being a quality protein source.',
     aliases: ['beta-alanine', 'beta alanine', 'β-alanine'],
+    isNitrogenCompound: true,
   ),
   _IngredientRule(
     name: 'L-Glutamine',
@@ -90,6 +99,7 @@ const _ingredientDatabase = <_IngredientRule>[
         'Free amino acid sometimes added in excess to boost nitrogen content. '
         'While it has some gut-health benefits, large amounts suggest spiking.',
     aliases: ['l-glutamine', 'glutamine', 'l glutamine'],
+    isNitrogenCompound: true,
   ),
   _IngredientRule(
     name: 'Arginine',
@@ -98,6 +108,7 @@ const _ingredientDatabase = <_IngredientRule>[
         'Free-form amino acid used to boost nitrogen scores. '
         'At high doses it is more indicative of spiking than a benefit.',
     aliases: ['arginine', 'l-arginine', 'l arginine', 'arginine akg'],
+    isNitrogenCompound: true,
   ),
   _IngredientRule(
     name: 'Alanine',
@@ -105,6 +116,7 @@ const _ingredientDatabase = <_IngredientRule>[
     explanation:
         'Cheap non-essential amino acid used to inflate protein readings.',
     aliases: ['alanine', 'l-alanine', 'l alanine'],
+    isNitrogenCompound: true,
   ),
   _IngredientRule(
     name: 'Leucine',
@@ -113,6 +125,7 @@ const _ingredientDatabase = <_IngredientRule>[
         'While leucine is a branched-chain amino acid with real benefit, '
         'excessive free-form leucine on a label can indicate spiking.',
     aliases: ['leucine', 'l-leucine', 'l leucine'],
+    isNitrogenCompound: true,
   ),
   _IngredientRule(
     name: 'Sucralose',
@@ -239,6 +252,12 @@ class ScanViewModel extends ChangeNotifier {
   List<DetectedIngredient> detectedIngredients = [];
   bool geminiUsed = false;
 
+  // Set to true once the user manually edits the ingredient list and the
+  // verdict is recomputed from that edit via `updateIngredientsAndReanalyze`.
+  // The verdict card uses this to switch to a plain Authentic / Non-Authentic
+  // presentation instead of the full ML-confidence wording.
+  bool ingredientManuallyEdited = false;
+
   // ── Derived verdict (FIX #3) ──────────────────────────────────────────
   // A single source of truth for the verdict UI — replaces scattered string
   // comparisons spread across widgets.
@@ -265,6 +284,13 @@ class ScanViewModel extends ChangeNotifier {
 
   String get verdictLabel {
     if (extractedResult == null) return '';
+
+    if (ingredientManuallyEdited) {
+      return hasSuspiciousIngredients
+          ? 'Non-Authentic — suspicious nitrogen compound found in edited ingredients'
+          : 'Authentic — no suspicious nitrogen compound found in edited ingredients';
+    }
+
     final pct = '${(aiConfidence * 100).toStringAsFixed(0)}%';
     if (lowOcrQuality) return 'Scan quality too low — try retaking the photo';
     if (lowAiConfidence)
@@ -283,6 +309,66 @@ class ScanViewModel extends ChangeNotifier {
   bool _hasValidImageExtension(File file) {
     final path = file.path.toLowerCase();
     return _allowedExtensions.any((ext) => path.endsWith(ext));
+  }
+
+  // ── Manual re-analysis after the user edits ingredients ────────────────
+  //
+  // Called from the confirm sheet whenever the user finishes editing the
+  // ingredient text field. This is a deterministic, rule-based check (not
+  // the ML model) — it scans the edited text for known nitrogen-containing
+  // compounds that are commonly used for amino/nitrogen spiking. If any are
+  // present the verdict flips to Non-Authentic; otherwise Authentic.
+
+  void updateIngredientsAndReanalyze(String editedText) {
+    final trimmed = editedText.trim();
+
+    ingredientManuallyEdited = true;
+
+    if (extractedResult != null) {
+      extractedResult = extractedResult!.copyWith(ingredientText: trimmed);
+    }
+
+    final nitrogenHits = _detectNitrogenCompounds(trimmed);
+    // Keep the full detected-ingredient list (nitrogen + sweeteners/fillers)
+    // in sync so the "Flagged Ingredients" panel still reflects the edit.
+    detectedIngredients = _detectIngredients(trimmed);
+
+    hasSuspiciousIngredients = nitrogenHits.isNotEmpty;
+    aiLabel = hasSuspiciousIngredients ? 'Spiked' : 'Authentic';
+    // Rule-based checks are deterministic, so we treat this as full
+    // confidence rather than routing through the ML confidence gate.
+    aiConfidence = 1.0;
+    lowAiConfidence = false;
+    lowOcrQuality = false;
+    errorMessage = null;
+
+    notifyListeners();
+  }
+
+  // Scans the given ingredient text for nitrogen-containing compounds known
+  // to be used for amino/nitrogen spiking (e.g. free-form amino acids,
+  // creatine). Returns the matched rules.
+  List<DetectedIngredient> _detectNitrogenCompounds(String ingredientText) {
+    if (ingredientText.isEmpty) return [];
+    final lower = ingredientText.toLowerCase();
+    final found = <DetectedIngredient>[];
+    for (final rule in _ingredientDatabase) {
+      if (!rule.isNitrogenCompound) continue;
+      for (final alias in rule.aliases) {
+        if (lower.contains(alias)) {
+          found.add(
+            DetectedIngredient(
+              name: rule.name,
+              category: rule.category,
+              explanation: rule.explanation,
+              isAmSpiking: true,
+            ),
+          );
+          break;
+        }
+      }
+    }
+    return found;
   }
 
   // ── Multi-angle scan pipeline ─────────────────────────────────────────
@@ -926,6 +1012,12 @@ class ScanViewModel extends ChangeNotifier {
   }
 
   String _buildAnalysisResult() {
+    if (ingredientManuallyEdited) {
+      final pct = '${(aiConfidence * 100).toStringAsFixed(0)}%';
+      return hasSuspiciousIngredients
+          ? 'NON-AUTHENTIC ($pct)'
+          : 'AUTHENTIC ($pct)';
+    }
     final pct = '${(aiConfidence * 100).toStringAsFixed(0)}%';
     switch (aiLabel) {
       case 'Spiked':
@@ -985,6 +1077,7 @@ class ScanViewModel extends ChangeNotifier {
     lowOcrQuality = false;
     lowAiConfidence = false;
     geminiUsed = false;
+    ingredientManuallyEdited = false;
     scannedImageFile = imageFile;
     notifyListeners();
   }
@@ -1007,6 +1100,7 @@ class ScanViewModel extends ChangeNotifier {
     lowOcrQuality = false;
     lowAiConfidence = false;
     geminiUsed = false;
+    ingredientManuallyEdited = false;
     scannedImageFile = null;
     currentStage = ScanStage.idle;
     isScanning = false;

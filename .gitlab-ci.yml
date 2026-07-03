@@ -1,3 +1,18 @@
+stages:
+  - analyze
+  - quality
+  - build
+  - deploy
+  - notify
+
+variables:
+  DOCR_REPO: registry.digitalocean.com/<your-registry-name>/cal0appv2
+  DO_APP_NAME: cal0appv2-apk-download
+  GIT_DEPTH: "0"   # SonarCloud needs full git history for its analysis
+
+# ===========================================================
+# Existing: admin_portal → Firebase Hosting (unchanged)
+# ===========================================================
 deploy_admin_portal:
   image: node:20
   stage: deploy
@@ -13,3 +28,97 @@ deploy_admin_portal:
     - export GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-key.json
   script:
     - firebase deploy --only hosting --project cal0app --non-interactive
+
+# ===========================================================
+# New: Flutter app → APK download page on DigitalOcean
+# Only triggers when app code actually changes (not admin_portal edits)
+# ===========================================================
+flutter_analyze:
+  stage: analyze
+  image: ghcr.io/cirruslabs/flutter:stable
+  script:
+    - flutter pub get
+    - flutter analyze
+    - flutter test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - lib/**/*
+        - android/**/*
+        - pubspec.yaml
+
+# SonarCloud (not self-hosted SonarQube) — uses sonar-project.properties
+# for projectKey/organization, and SONAR_TOKEN/SONAR_HOST_URL CI variables
+# for auth + server location.
+sonarqube_scan:
+  stage: quality
+  image: sonarsource/sonar-scanner-cli:latest
+  script:
+    - sonar-scanner
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'
+      changes:
+        - lib/**/*
+        - android/**/*
+        - pubspec.yaml
+  allow_failure: false
+
+build_image:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    # Decode the release keystore from the base64 CI variable
+    - echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.jks
+    - export ANDROID_KEYSTORE_PATH=$(pwd)/android/app/release.jks
+    - docker login registry.digitalocean.com -u "$DO_API_TOKEN" -p "$DO_API_TOKEN"
+    - docker build
+        --build-arg ANDROID_KEYSTORE_PATH=$ANDROID_KEYSTORE_PATH
+        --build-arg ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD
+        --build-arg ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS
+        --build-arg ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD
+        -t $DOCR_REPO:$CI_COMMIT_SHORT_SHA -t $DOCR_REPO:latest .
+    - docker push $DOCR_REPO:$CI_COMMIT_SHORT_SHA
+    - docker push $DOCR_REPO:latest
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - lib/**/*
+        - android/**/*
+        - pubspec.yaml
+
+deploy_do:
+  stage: deploy
+  image: digitalocean/doctl:latest
+  when: manual
+  script:
+    - doctl auth init -t "$DO_API_TOKEN"
+    - doctl apps update $(doctl apps list --format ID,Spec.Name --no-header | grep "$DO_APP_NAME" | awk '{print $1}') --spec .do/app.yaml
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - lib/**/*
+        - android/**/*
+        - pubspec.yaml
+
+notify_jira:
+  stage: notify
+  image: curlimages/curl:latest
+  script:
+    - |
+      ISSUE_KEY=$(echo "$CI_COMMIT_MESSAGE" | grep -oE '[A-Z]+-[0-9]+' | head -1)
+      if [ -n "$ISSUE_KEY" ]; then
+        curl -s -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+          -X POST -H "Content-Type: application/json" \
+          --data "{\"body\":\"New APK deployed from commit $CI_COMMIT_SHORT_SHA.\"}" \
+          "$JIRA_BASE_URL/rest/api/2/issue/$ISSUE_KEY/comment"
+      else
+        echo "No Jira issue key found in commit message, skipping comment."
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - lib/**/*
+        - android/**/*
+        - pubspec.yaml

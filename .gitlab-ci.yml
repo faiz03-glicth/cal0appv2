@@ -87,6 +87,7 @@ build_image:
       changes:
         - lib/**/*
         - android/**/*
+        - assets/**/*
         - pubspec.yaml
 
 deploy_do:

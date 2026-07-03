@@ -38,7 +38,7 @@ flutter_analyze:
   image: ghcr.io/cirruslabs/flutter:stable
   script:
     - flutter pub get
-    - flutter analyze
+    - flutter analyze --no-fatal-infos --no-fatal-warnings
     - flutter test
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == "main"'

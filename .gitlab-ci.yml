@@ -97,7 +97,8 @@ deploy_do:
     entrypoint: [""]
   when: manual
   script:
-    - which doctl || find / -name doctl -type f 2>/dev/null
+    - /app/doctl auth init -t "$DO_API_TOKEN"
+    - /app/doctl apps update $(/app/doctl apps list --format ID,Spec.Name --no-header | grep "$DO_APP_NAME" | awk '{print $1}') --spec .do/app.yaml
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes:

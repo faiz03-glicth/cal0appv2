@@ -90,7 +90,6 @@ build_image:
         - assets/**/*
         - pubspec.yaml
         - .gitlab-ci.yml
-
 deploy_do:
   stage: deploy
   image:
@@ -98,8 +97,7 @@ deploy_do:
     entrypoint: [""]
   when: manual
   script:
-    - doctl auth init -t "$DO_API_TOKEN"
-    - doctl apps update $(doctl apps list --format ID,Spec.Name --no-header | grep "$DO_APP_NAME" | awk '{print $1}') --spec .do/app.yaml
+    - which doctl || find / -name doctl -type f 2>/dev/null
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes:

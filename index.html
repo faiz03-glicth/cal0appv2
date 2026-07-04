@@ -23,7 +23,7 @@
 <body>
   <div class="card">
     <h1>cal0app</h1>
-    <p class="version">Version <span id="version">latest</span></p>
+    <p class="version">Version <span id="version">loading…</span></p>
 
     <a class="btn" href="/cal0app-latest.apk" download>Download APK</a>
 
@@ -36,8 +36,6 @@
   </div>
 
   <script>
-    // Build the full APK URL dynamically from wherever this page is actually hosted,
-    // so the QR code always points to the right place even if the domain changes.
     var apkUrl = window.location.origin + '/cal0app-latest.apk';
 
     new QRCode(document.getElementById("qrcode"), {
@@ -48,6 +46,12 @@
       colorLight: "#f1f5f9",
       correctLevel: QRCode.CorrectLevel.M
     });
+
+    // Fetch the real version number baked in at build time
+    fetch('/version.txt?t=' + Date.now())
+      .then(function(res) { return res.text(); })
+      .then(function(v) { document.getElementById('version').textContent = v.trim(); })
+      .catch(function() { document.getElementById('version').textContent = 'unknown'; });
   </script>
 </body>
 </html>

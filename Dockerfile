@@ -9,6 +9,7 @@ ARG ANDROID_KEYSTORE_PASSWORD
 ARG ANDROID_KEY_ALIAS
 ARG ANDROID_KEY_PASSWORD
 ARG GEMINI_API_KEY
+ARG BUILD_NUMBER=1
 
 ENV ANDROID_KEYSTORE_PATH=/app/android/app/release.jks
 ENV ANDROID_KEYSTORE_PASSWORD=${ANDROID_KEYSTORE_PASSWORD}
@@ -16,10 +17,17 @@ ENV ANDROID_KEY_ALIAS=${ANDROID_KEY_ALIAS}
 ENV ANDROID_KEY_PASSWORD=${ANDROID_KEY_PASSWORD}
 
 RUN flutter pub get
-RUN flutter build apk --release --dart-define=GEMINI_API_KEY=${GEMINI_API_KEY}
 
-# Extract the version string (e.g. "1.1.1") from pubspec.yaml's "version: 1.1.1+2" line
-RUN grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1 > /tmp/version.txt
+# Human-readable version (e.g. "1.0.1") comes from pubspec.yaml, set manually
+# by you for real milestones. The build number (e.g. "42") auto-increments
+# every pipeline run via GitLab's $CI_PIPELINE_IID, passed in as BUILD_NUMBER.
+RUN BUILD_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1) && \
+    echo "Building version $BUILD_NAME+$BUILD_NUMBER" && \
+    flutter build apk --release \
+      --build-name=$BUILD_NAME \
+      --build-number=$BUILD_NUMBER \
+      --dart-define=GEMINI_API_KEY=${GEMINI_API_KEY} && \
+    echo "$BUILD_NAME+$BUILD_NUMBER" > /tmp/version.txt
 
 # ---- Stage 2: Serve download page + APK via nginx ----
 FROM nginx:1.27-alpine

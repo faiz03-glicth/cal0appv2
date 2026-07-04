@@ -378,7 +378,8 @@ class _FeatureCard extends StatelessWidget {
 }
 
 // Build-mode check
-const bool kDebugBuild = !bool.fromEnvironment('dart.vm.product');
+// const bool kDebugBuild = !bool.fromEnvironment('dart.vm.product');
+const bool kDebugBuild = true;
 
 class _SimpleCalorieRing extends StatelessWidget {
   const _SimpleCalorieRing();

@@ -78,6 +78,7 @@ build_image:
         --build-arg ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS
         --build-arg ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD
         --build-arg GEMINI_API_KEY=$GEMINI_API_KEY
+        --build-arg BUILD_NUMBER=$CI_PIPELINE_IID
         -t $DOCR_REPO:$CI_COMMIT_SHORT_SHA -t $DOCR_REPO:latest .
     - docker push $DOCR_REPO:$CI_COMMIT_SHORT_SHA
     - docker push $DOCR_REPO:latest

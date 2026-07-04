@@ -45,7 +45,9 @@ flutter_analyze:
       changes:
         - lib/**/*
         - android/**/*
+        - assets/**/*
         - pubspec.yaml
+        - .gitlab-ci.yml
 
 # SonarCloud (not self-hosted SonarQube) — uses sonar-project.properties
 # for projectKey/organization, and SONAR_TOKEN/SONAR_HOST_URL CI variables
@@ -60,7 +62,9 @@ sonarqube_scan:
       changes:
         - lib/**/*
         - android/**/*
+        - assets/**/*
         - pubspec.yaml
+        - .gitlab-ci.yml
   allow_failure: false
 
 build_image:
@@ -72,7 +76,7 @@ build_image:
     # Decode the release keystore from the base64 CI variable
     - echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.jks
     - export ANDROID_KEYSTORE_PATH=$(pwd)/android/app/release.jks
-    - ls -la assets/ml/model.onnx    
+    - ls -la assets/ml/model.onnx
     - docker login registry.digitalocean.com -u "$DO_API_TOKEN" -p "$DO_API_TOKEN"
     - docker build
         --build-arg ANDROID_KEYSTORE_PATH=$ANDROID_KEYSTORE_PATH
@@ -89,6 +93,7 @@ build_image:
         - android/**/*
         - assets/**/*
         - pubspec.yaml
+        - .gitlab-ci.yml
 
 deploy_do:
   stage: deploy
@@ -107,7 +112,6 @@ deploy_do:
         - assets/**/*
         - pubspec.yaml
         - .gitlab-ci.yml
-
 
 notify_jira:
   stage: notify
@@ -128,4 +132,6 @@ notify_jira:
       changes:
         - lib/**/*
         - android/**/*
+        - assets/**/*
         - pubspec.yaml
+        - .gitlab-ci.yml

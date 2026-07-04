@@ -8,6 +8,7 @@ ARG ANDROID_KEYSTORE_PATH
 ARG ANDROID_KEYSTORE_PASSWORD
 ARG ANDROID_KEY_ALIAS
 ARG ANDROID_KEY_PASSWORD
+ARG GEMINI_API_KEY
 
 ENV ANDROID_KEYSTORE_PATH=/app/android/app/release.jks
 ENV ANDROID_KEYSTORE_PASSWORD=${ANDROID_KEYSTORE_PASSWORD}
@@ -15,7 +16,7 @@ ENV ANDROID_KEY_ALIAS=${ANDROID_KEY_ALIAS}
 ENV ANDROID_KEY_PASSWORD=${ANDROID_KEY_PASSWORD}
 
 RUN flutter pub get
-RUN flutter build apk --release
+RUN flutter build apk --release --dart-define=GEMINI_API_KEY=${GEMINI_API_KEY}
 
 # Extract the version string (e.g. "1.1.1") from pubspec.yaml's "version: 1.1.1+2" line
 RUN grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1 > /tmp/version.txt

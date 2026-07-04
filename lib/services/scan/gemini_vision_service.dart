@@ -100,7 +100,7 @@ class GeminiNutritionResult {
 
 class GeminiVisionService {
   static const _apiKey = String.fromEnvironment('GEMINI_API_KEY');
-  static const _model = 'gemini-1.5-flash';
+  static const _model = 'gemini-flash-latest';
   static const _endpoint =
       'https://generativelanguage.googleapis.com/v1beta/models/'
       '$_model:generateContent';
@@ -175,8 +175,9 @@ class GeminiVisionService {
       ],
       'generationConfig': {
         'temperature': 0.0,
-        'maxOutputTokens': 1024,
+        'maxOutputTokens': 4096,
         'responseMimeType': 'application/json',
+        'thinkingConfig': {'thinkingBudget': 0},
       },
     };
   }

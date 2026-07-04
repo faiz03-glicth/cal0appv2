@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 import 'package:cal0appv2/services/logs/debuglog_services.dart';
@@ -40,11 +41,6 @@ class AminoSpikingAI {
     }
   }
 
-  /// Returns a Map with keys:
-  ///   'isSpiked'   → bool
-  ///   'confidence' → double (0.0 – 1.0)
-  ///   'label'      → String ('Authentic' | 'Spiked' | 'Plant-Based')
-  ///   'labelIndex' → int (0 | 1 | 2)
   Future<Map<String, dynamic>> analyzeIngredients(String ingredientText) async {
     if (!isReady) {
       LogService.error('AI: not ready, skipping inference');
@@ -63,11 +59,11 @@ class AminoSpikingAI {
 
       // Build input tensors — shape [1, 128] as int64
       final inputIdsTensor = await OrtValue.fromList(
-        inputIds.map((e) => e.toInt()).toList(),
+        Int64List.fromList(inputIds),
         [1, maxLength],
       );
       final attentionMaskTensor = await OrtValue.fromList(
-        attentionMask.map((e) => e.toInt()).toList(),
+        Int64List.fromList(attentionMask),
         [1, maxLength],
       );
 
@@ -108,10 +104,12 @@ class AminoSpikingAI {
         };
       }
 
-      // rawList is flat [v0, v1, v2] since batch=1
-      final List<double> logits = (rawList)
-          .map((e) => (e as num).toDouble())
-          .toList();
+      final List<double> logits = rawList.expand((e) {
+        if (e is List) {
+          return e.map((x) => (x as num).toDouble());
+        }
+        return [(e as num).toDouble()];
+      }).toList();
 
       final probs = _softmax(logits);
 

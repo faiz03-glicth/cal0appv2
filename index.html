@@ -4,24 +4,50 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>cal0app — Download</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   body { font-family: system-ui, sans-serif; background: #0f172a; color: #f1f5f9;
-         display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-  .card { text-align: center; padding: 2.5rem; background: #1e293b; border-radius: 16px; max-width: 380px; }
+         display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 1rem; }
+  .card { text-align: center; padding: 2.5rem; background: #1e293b; border-radius: 16px; max-width: 380px; width: 100%; }
   h1 { margin-bottom: 0.25rem; }
   p.version { color: #94a3b8; margin-top: 0; margin-bottom: 1.5rem; }
   a.btn { display: inline-block; background: #22c55e; color: #0f172a; font-weight: 600;
-          padding: 0.75rem 1.75rem; border-radius: 8px; text-decoration: none; }
+          padding: 0.75rem 1.75rem; border-radius: 8px; text-decoration: none; margin-bottom: 1.5rem; }
   a.btn:hover { background: #4ade80; }
   p.note { color: #64748b; font-size: 0.8rem; margin-top: 1.25rem; }
+  .qr-wrap { background: #f1f5f9; padding: 16px; border-radius: 12px; display: inline-block; margin-bottom: 1rem; }
+  .qr-label { color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.75rem; }
+  hr { border: none; border-top: 1px solid #334155; margin: 1.5rem 0; }
 </style>
 </head>
 <body>
   <div class="card">
     <h1>cal0app</h1>
     <p class="version">Version <span id="version">latest</span></p>
+
     <a class="btn" href="/cal0app-latest.apk" download>Download APK</a>
+
+    <hr>
+
+    <p class="qr-label">Or scan with your phone's camera / Google Lens</p>
+    <div class="qr-wrap" id="qrcode"></div>
+
     <p class="note">Android only. You may need to allow "install from unknown sources".</p>
   </div>
+
+  <script>
+    // Build the full APK URL dynamically from wherever this page is actually hosted,
+    // so the QR code always points to the right place even if the domain changes.
+    var apkUrl = window.location.origin + '/cal0app-latest.apk';
+
+    new QRCode(document.getElementById("qrcode"), {
+      text: apkUrl,
+      width: 200,
+      height: 200,
+      colorDark: "#0f172a",
+      colorLight: "#f1f5f9",
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  </script>
 </body>
 </html>

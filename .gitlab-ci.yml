@@ -6,7 +6,7 @@ stages:
   - notify
 
 variables:
-  DOCR_REPO: registry.digitalocean.com/<your-registry-name>/cal0appv2
+  DOCR_REPO: registry.digitalocean.com/cal0appv2-registry/cal0appv2
   DO_APP_NAME: cal0appv2-apk-download
   GIT_DEPTH: "0"   # SonarCloud needs full git history for its analysis
 

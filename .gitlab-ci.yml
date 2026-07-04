@@ -7,7 +7,7 @@ stages:
 variables:
   DOCR_REPO: registry.digitalocean.com/cal0appv2-registry/cal0appv2
   DO_APP_NAME: cal0appv2-apk-download
-  GIT_DEPTH: "0"   # SonarCloud needs full git history for its analysis
+  GIT_DEPTH: "0"
 
 # ===========================================================
 # Existing: admin_portal → Firebase Hosting (unchanged)
@@ -29,9 +29,7 @@ deploy_admin_portal:
     - firebase deploy --only hosting --project cal0app --non-interactive
 
 # ===========================================================
-# Flutter app → APK download page on DigitalOcean
-# Jira notifications now handled by GitLab's native Jira integration
-# (Settings > Integrations > Jira) instead of a custom CI job.
+# Flutter app → APK download page (+ QR code) on DigitalOcean
 # ===========================================================
 flutter_analyze:
   stage: analyze
@@ -90,6 +88,10 @@ build_image:
         - assets/**/*
         - pubspec.yaml
         - .gitlab-ci.yml
+        - Dockerfile
+        - nginx.conf
+        - index.html
+
 deploy_do:
   stage: deploy
   image:
@@ -107,3 +109,6 @@ deploy_do:
         - assets/**/*
         - pubspec.yaml
         - .gitlab-ci.yml
+        - Dockerfile
+        - nginx.conf
+        - index.html

@@ -92,7 +92,9 @@ build_image:
 
 deploy_do:
   stage: deploy
-  image: digitalocean/doctl:latest
+  image:
+    name: digitalocean/doctl:latest
+    entrypoint: [""]
   when: manual
   script:
     - doctl auth init -t "$DO_API_TOKEN"

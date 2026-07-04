@@ -104,7 +104,10 @@ deploy_do:
       changes:
         - lib/**/*
         - android/**/*
+        - assets/**/*
         - pubspec.yaml
+        - .gitlab-ci.yml
+
 
 notify_jira:
   stage: notify

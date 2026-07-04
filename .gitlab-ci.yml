@@ -99,7 +99,7 @@ deploy_do:
     entrypoint: [""]
   when: manual
   script:
-    - sed -i "s/tag: latest/tag: $CI_COMMIT_SHORT_SHA/" .do/app.yaml
+    - 'sed -i "s/tag: latest/tag: $CI_COMMIT_SHORT_SHA/" .do/app.yaml'
     - /app/doctl auth init -t "$DO_API_TOKEN"
     - /app/doctl apps update $(/app/doctl apps list --format ID,Spec.Name --no-header | grep "$DO_APP_NAME" | awk '{print $1}') --spec .do/app.yaml
   rules:

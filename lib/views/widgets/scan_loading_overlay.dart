@@ -151,7 +151,7 @@ class _ScanLoadingOverlayState extends State<ScanLoadingOverlay>
                         // Spinning gradient arc
                         AnimatedBuilder(
                           animation: _spinCtrl,
-                          builder: (_, __) => Transform.rotate(
+                          builder: (_, _) => Transform.rotate(
                             angle: _spinCtrl.value * 2 * math.pi,
                             child: CustomPaint(
                               size: const Size(100, 100),
@@ -176,7 +176,7 @@ class _ScanLoadingOverlayState extends State<ScanLoadingOverlay>
                                 // Sweeping horizontal scan line
                                 AnimatedBuilder(
                                   animation: _scanLineCtrl,
-                                  builder: (_, __) {
+                                  builder: (_, _) {
                                     final y = _scanLineCtrl.value * 72;
                                     return Positioned(
                                       top: y - 1,
@@ -271,7 +271,7 @@ class _ScanLoadingOverlayState extends State<ScanLoadingOverlay>
                   // ── Progress bar with shimmer ─────────────────────────
                   AnimatedBuilder(
                     animation: Listenable.merge([_progressAnim, _shimmerCtrl]),
-                    builder: (_, __) {
+                    builder: (_, _) {
                       final progress = _progressAnim.value.clamp(0.0, 1.0);
                       return Column(
                         children: [

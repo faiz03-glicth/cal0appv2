@@ -163,10 +163,11 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
         _controller.start();
       }
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _uploading = false;
         });
+      }
     }
   }
 
@@ -289,7 +290,7 @@ class _BottomBar extends StatelessWidget {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade900.withOpacity(0.9),
+                  color: Colors.red.shade900.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -356,7 +357,7 @@ class _BottomBar extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: uploading
                     ? Colors.white12
-                    : Colors.white.withOpacity(0.15),
+                    : Colors.white.withValues(alpha: 0.15),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 shape: RoundedRectangleBorder(

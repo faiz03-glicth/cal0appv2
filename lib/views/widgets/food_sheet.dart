@@ -652,7 +652,7 @@ class _FoodIcon extends StatelessWidget {
     width: 48,
     height: 48,
     decoration: BoxDecoration(
-      color: c.primary.withOpacity(0.08),
+      color: c.primary.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(AppRadius.sm),
     ),
     child: Icon(Icons.restaurant, color: c.primary, size: 22),
@@ -667,7 +667,7 @@ class _MacroChip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.10),
+      color: color.withValues(alpha: 0.10),
       borderRadius: BorderRadius.circular(4),
     ),
     child: Text(
@@ -730,7 +730,7 @@ class _IncompleteBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
     decoration: BoxDecoration(
-      color: const Color(0xFFF59E0B).withOpacity(0.15),
+      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(4),
     ),
     child: const Text(
@@ -854,9 +854,9 @@ class _ManualForm extends StatelessWidget {
                     horizontal: AppSpacing.md,
                   ),
                   decoration: BoxDecoration(
-                    color: c.primary.withOpacity(0.08),
+                    color: c.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(AppRadius.md),
-                    border: Border.all(color: c.primary.withOpacity(0.3)),
+                    border: Border.all(color: c.primary.withValues(alpha: 0.3)),
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -941,10 +941,10 @@ class _ManualForm extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              color: const Color(0xFFF59E0B).withOpacity(0.08),
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(AppRadius.sm),
               border: Border.all(
-                color: const Color(0xFFF59E0B).withOpacity(0.3),
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
               ),
             ),
             child: Row(
@@ -979,9 +979,9 @@ class _ManualForm extends StatelessWidget {
               vertical: AppSpacing.xs + 2,
             ),
             decoration: BoxDecoration(
-              color: c.primary.withOpacity(0.06),
+              color: c.primary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(color: c.primary.withOpacity(0.2)),
+              border: Border.all(color: c.primary.withValues(alpha: 0.2)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1025,9 +1025,9 @@ class _SelectedFoodBanner extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(AppSpacing.md),
     decoration: BoxDecoration(
-      color: c.primary.withOpacity(0.06),
+      color: c.primary.withValues(alpha: 0.06),
       borderRadius: BorderRadius.circular(AppRadius.md),
-      border: Border.all(color: c.primary.withOpacity(0.2)),
+      border: Border.all(color: c.primary.withValues(alpha: 0.2)),
     ),
     child: Row(
       children: [

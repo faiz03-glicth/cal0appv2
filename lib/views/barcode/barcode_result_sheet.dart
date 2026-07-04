@@ -165,7 +165,7 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: c.primary.withOpacity(0.08),
+                      color: c.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
                     child: Text(
@@ -250,7 +250,7 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
                         decoration: BoxDecoration(
                           color: _gradeColor(
                             food.nutritionGrade!,
-                          ).withOpacity(0.12),
+                          ).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
                         child: Row(
@@ -281,7 +281,7 @@ class _BarcodeResultSheetState extends State<BarcodeResultSheet> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withOpacity(0.1),
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
                         child: Text(
@@ -363,7 +363,7 @@ class _ProductBanner extends StatelessWidget {
       Container(
         padding: const EdgeInsets.all(AppSpacing.sm + 2),
         decoration: BoxDecoration(
-          color: c.success.withOpacity(0.1),
+          color: c.success.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         child: Icon(Icons.check_circle_outline, color: c.success, size: 26),
@@ -392,7 +392,7 @@ class _ProductBanner extends StatelessWidget {
               ),
               decoration: BoxDecoration(
                 color: (food.isVerified ? c.success : Colors.orange)
-                    .withOpacity(0.1),
+                    .withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(AppRadius.pill),
               ),
               child: Row(
@@ -437,7 +437,7 @@ class _NotFoundBanner extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(AppSpacing.sm + 2),
             decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
+              color: Colors.orange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppRadius.md),
             ),
             child: const Icon(Icons.search_off, color: Colors.orange, size: 26),

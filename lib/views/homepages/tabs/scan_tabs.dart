@@ -113,9 +113,9 @@ class ScanTab extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: c.warning.withOpacity(0.1),
+                  color: c.warning.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: c.warning.withOpacity(0.4)),
+                  border: Border.all(color: c.warning.withValues(alpha: 0.4)),
                 ),
                 child: Text(
                   vm.errorMessage!,
@@ -129,9 +129,9 @@ class ScanTab extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: c.success.withOpacity(0.1),
+                  color: c.success.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: c.success.withOpacity(0.4)),
+                  border: Border.all(color: c.success.withValues(alpha: 0.4)),
                 ),
                 child: Row(
                   children: [
@@ -156,8 +156,8 @@ class ScanTab extends StatelessWidget {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: vm.hasSuspiciousIngredients
-                      ? c.warning.withOpacity(0.12)
-                      : c.success.withOpacity(0.12),
+                      ? c.warning.withValues(alpha: 0.12)
+                      : c.success.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: vm.hasSuspiciousIngredients ? c.warning : c.success,
@@ -213,9 +213,9 @@ class ScanTab extends StatelessWidget {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: c.warning.withOpacity(0.08),
+                    color: c.warning.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: c.warning.withOpacity(0.3)),
+                    border: Border.all(color: c.warning.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,9 +244,9 @@ class ScanTab extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.orange.withOpacity(0.4)),
+                    border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     children: [
@@ -366,7 +366,7 @@ class ScanTab extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -391,7 +391,7 @@ class ScanTab extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: c.primary.withOpacity(0.1),
+                  color: c.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

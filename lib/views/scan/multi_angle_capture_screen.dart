@@ -23,8 +23,7 @@ class _AngleSlot {
     required this.hint,
     required this.icon,
     this.required = true,
-    this.image,
-  });
+  }) : image = null;
 
   bool get captured => image != null;
 }

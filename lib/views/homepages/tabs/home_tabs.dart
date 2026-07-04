@@ -79,7 +79,7 @@ class _HomeTabState extends State<HomeTab> with AutomaticKeepAliveClientMixin {
               ),
               child: CircleAvatar(
                 radius: 16,
-                backgroundColor: Colors.white.withOpacity(0.25),
+                backgroundColor: Colors.white.withValues(alpha: 0.25),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : '?',
                   style: const TextStyle(
@@ -435,8 +435,8 @@ class _SimpleCalorieRing extends StatelessWidget {
                           value: progress,
                           strokeWidth: 9, // was 10
                           backgroundColor: isOver
-                              ? c.warning.withOpacity(0.15)
-                              : c.primary.withOpacity(0.12),
+                              ? c.warning.withValues(alpha: 0.15)
+                              : c.primary.withValues(alpha: 0.12),
                           valueColor: AlwaysStoppedAnimation<Color>(
                             isOver ? c.warning : c.primary,
                           ),
@@ -508,7 +508,7 @@ class _SimpleCalorieRing extends StatelessWidget {
                             child: LinearProgressIndicator(
                               value: progress,
                               minHeight: 6,
-                              backgroundColor: c.primary.withOpacity(0.1),
+                              backgroundColor: c.primary.withValues(alpha: 0.1),
                               valueColor: AlwaysStoppedAnimation<Color>(
                                 isOver ? c.warning : c.primary,
                               ),

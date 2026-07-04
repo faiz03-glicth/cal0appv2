@@ -153,10 +153,12 @@ class ScanViewModel extends ChangeNotifier {
 
     final pct = '${(aiConfidence * 100).toStringAsFixed(0)}%';
     if (lowOcrQuality) return 'Scan quality too low — try retaking the photo';
-    if (lowAiConfidence)
+    if (lowAiConfidence) {
       return 'AI confidence low ($pct) — please verify manually';
-    if (aiLabel == 'Plant-Based')
+    }
+    if (aiLabel == 'Plant-Based') {
       return 'Plant-Based Protein ($pct confidence)';
+    }
     return hasSuspiciousIngredients
         ? 'Potential amino spiking detected ($pct confidence)'
         : 'No suspicious ingredients found ($pct confidence)';

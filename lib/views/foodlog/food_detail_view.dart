@@ -757,8 +757,9 @@ class _EditSheetState extends State<_EditSheet>
       _glutamine,
       _taurine,
       _ingredientText,
-    ])
+    ]) {
       ctrl.dispose();
+    }
     super.dispose();
   }
 

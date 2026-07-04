@@ -472,7 +472,7 @@ class _NutrientGroup extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: c.primary.withOpacity(0.1),
+                      color: c.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
                     child: Text(
@@ -566,9 +566,9 @@ class _NutrientRowWidget extends StatelessWidget {
     } else if (pct >= 0.9) {
       barColor = row.color;
     } else if (pct >= 0.5) {
-      barColor = row.color.withOpacity(0.75);
+      barColor = row.color.withValues(alpha: 0.75);
     } else {
-      barColor = row.color.withOpacity(0.5);
+      barColor = row.color.withValues(alpha: 0.5);
     }
 
     return Padding(
@@ -630,7 +630,7 @@ class _NutrientRowWidget extends StatelessWidget {
             child: LinearProgressIndicator(
               value: pct,
               minHeight: 5,
-              backgroundColor: row.color.withOpacity(0.10),
+              backgroundColor: row.color.withValues(alpha: 0.10),
               valueColor: AlwaysStoppedAnimation<Color>(barColor),
             ),
           ),

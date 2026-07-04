@@ -10,10 +10,8 @@ import '/../views/widgets/scan_loading_overlay.dart';
 import '/../viewModels/scan/barcode_viewmodel.dart';
 import '/../viewModels/scan/scan_viewmodel.dart';
 import '/../viewModels/foodlog/foodlog_viewmodel.dart';
-import '/../views/widgets/scan_confirm_sheet.dart';
 import '/../views/scan/multi_angle_capture_screen.dart';
 import 'package:cal0appv2/models/scan/scan_stage.dart';
-import 'package:cal0appv2/models/scan_result_model.dart';
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});

@@ -777,8 +777,9 @@ class _ScanConfirmSheetState extends State<ScanConfirmSheet>
       _magnesium,
       _zinc,
       _ingredientText,
-    ])
+    ]) {
       c.dispose();
+    }
     super.dispose();
   }
 }

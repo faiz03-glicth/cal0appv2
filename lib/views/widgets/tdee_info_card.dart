@@ -36,7 +36,7 @@ class TdeeInfoCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: c.primary.withOpacity(0.1),
+                  color: c.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: Text(
@@ -65,7 +65,7 @@ class TdeeInfoCard extends StatelessWidget {
                 label: 'TDEE',
                 value: '${vm.tdee}',
                 sub: '×${vm.activityMult.toStringAsFixed(3)} activity',
-                color: c.primary.withOpacity(0.8),
+                color: c.primary.withValues(alpha: 0.8),
               ),
               _Arrow(color: c.divider),
               _EnergyStep(
@@ -134,9 +134,9 @@ class _EnergyStep extends StatelessWidget {
         ),
         decoration: highlight
             ? BoxDecoration(
-                color: color.withOpacity(0.08),
+                color: color.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(color: color.withOpacity(0.3)),
+                border: Border.all(color: color.withValues(alpha: 0.3)),
               )
             : null,
         child: Column(

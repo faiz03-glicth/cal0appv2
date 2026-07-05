@@ -182,10 +182,6 @@ class GeminiVisionService {
     };
   }
 
-  // ── Prompt ────────────────────────────────────────────────────────────
-  // IMPORTANT: Every key here maps 1-to-1 to a field in GeminiNutritionResult
-  // and ScanResultModel. Do NOT rename keys without updating _parseResponse.
-
   static const _prompt = r'''
 You are an expert nutrition label OCR and parser for supplement products.
 Analyse ALL label images provided (may be multiple angles of the same product).

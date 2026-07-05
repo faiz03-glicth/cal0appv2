@@ -11,6 +11,11 @@ import 'package:cal0appv2/views/debug/debug_view.dart';
 import 'package:cal0appv2/viewModels/foodlog/foodlog_viewmodel.dart';
 import 'package:cal0appv2/viewModels/dashboard/dashboard_viewmodel.dart';
 import 'package:cal0appv2/views/users/userprofile_view.dart';
+// ── Feature-card navigation targets ─────────────────────────────────────
+import 'package:cal0appv2/viewModels/scan/scan_viewmodel.dart';
+import 'package:cal0appv2/views/scan/multi_angle_capture_screen.dart';
+import 'package:cal0appv2/views/homepages/tabs/dashboard_view.dart';
+import 'package:cal0appv2/views/foodlog/food_history_view.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -42,6 +47,57 @@ class _HomeTabState extends State<HomeTab> with AutomaticKeepAliveClientMixin {
     if (h < 12) return 'Good morning';
     if (h < 17) return 'Good afternoon';
     return 'Good evening';
+  }
+
+  // ── Feature-card navigation ─────────────────────────────────────────────
+  //
+  // Each card jumps straight to the same destination its equivalent
+  // in-app entry point already leads to — no new flows, just direct routes
+  // to existing screens.
+
+  void _openAiScan(BuildContext context) {
+    // Same destination as + → Photo log in navbarbottom.dart.
+    final scanVm = context.read<ScanViewModel>();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider.value(
+          value: scanVm,
+          child: MultiAngleCaptureScreen(scaffoldContext: context),
+        ),
+      ),
+    );
+  }
+
+  void _openHealthCheck(BuildContext context) {
+    // Profile page, auto-scrolled to the Health Conditions card.
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const UserProfileView(scrollToHealthCheck: true),
+      ),
+    );
+  }
+
+  void _openDashboard(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DashboardTab()),
+    );
+  }
+
+  void _openHistory(BuildContext context) {
+    // Same destination + provider setup as the "History" link inside
+    // FoodDiary on the Dashboard tab (lib/views/widgets/food_diary.dart).
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider(
+          create: (_) => FoodHistoryViewModel(),
+          child: const FoodHistoryView(),
+        ),
+      ),
+    );
   }
 
   @override
@@ -257,6 +313,7 @@ class _HomeTabState extends State<HomeTab> with AutomaticKeepAliveClientMixin {
                         'AI Scan',
                         'Detect amino spiking',
                         c.primary,
+                        onTap: () => _openAiScan(context),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
@@ -266,6 +323,7 @@ class _HomeTabState extends State<HomeTab> with AutomaticKeepAliveClientMixin {
                         'Health Check',
                         'Smart food warnings',
                         const Color(0xFF22c55e),
+                        onTap: () => _openHealthCheck(context),
                       ),
                     ),
                   ],
@@ -282,6 +340,7 @@ class _HomeTabState extends State<HomeTab> with AutomaticKeepAliveClientMixin {
                         'Dashboard',
                         'Daily nutrients',
                         const Color(0xFFf5a623),
+                        onTap: () => _openDashboard(context),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
@@ -291,6 +350,7 @@ class _HomeTabState extends State<HomeTab> with AutomaticKeepAliveClientMixin {
                         'History',
                         'Review past logs',
                         C0Theme.slateGrey,
+                        onTap: () => _openHistory(context),
                       ),
                     ),
                   ],
@@ -342,36 +402,47 @@ class _FeatureCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final Color color;
-  const _FeatureCard(this.icon, this.title, this.subtitle, this.color);
+  final VoidCallback? onTap;
+  const _FeatureCard(
+    this.icon,
+    this.title,
+    this.subtitle,
+    this.color, {
+    this.onTap,
+  });
   @override
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(AppSpacing.sm),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppSpacing.sm),
+              ),
+              child: Icon(icon, color: color, size: 22),
             ),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            title,
-            style: AppTextStyles.caption.copyWith(
-              fontWeight: FontWeight.w700,
-              color: c.textPrimary,
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              title,
+              style: AppTextStyles.caption.copyWith(
+                fontWeight: FontWeight.w700,
+                color: c.textPrimary,
+              ),
             ),
-          ),
-          Text(
-            subtitle,
-            style: AppTextStyles.micro.copyWith(color: c.textSecondary),
-          ),
-        ],
+            Text(
+              subtitle,
+              style: AppTextStyles.micro.copyWith(color: c.textSecondary),
+            ),
+          ],
+        ),
       ),
     );
   }

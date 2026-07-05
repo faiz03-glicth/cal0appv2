@@ -17,7 +17,13 @@ import 'package:cal0appv2/viewModels/viewauth/auth_viewmodel.dart';
 import 'package:cal0appv2/views/users/report_submission_view.dart';
 
 class UserProfileView extends StatefulWidget {
-  const UserProfileView({super.key});
+  /// When true, the page automatically scrolls to the Health Conditions
+  /// card once it finishes loading — used by the Home screen's "Health
+  /// Check" feature card so it lands the user directly on that section
+  /// instead of just opening the top of Profile.
+  final bool scrollToHealthCheck;
+
+  const UserProfileView({super.key, this.scrollToHealthCheck = false});
   @override
   State<UserProfileView> createState() => _UserProfileViewState();
 }
@@ -30,6 +36,10 @@ class _UserProfileViewState extends State<UserProfileView> {
   final _height = TextEditingController();
   final _password = TextEditingController();
 
+  // Anchor for the Health Conditions card so we can scroll straight to it.
+  final GlobalKey _healthSectionKey = GlobalKey();
+  bool _pendingHealthScroll = false;
+
   String _gender = 'male';
   String _goal = 'maintain';
   String _activityLevel = 'moderately active';
@@ -39,6 +49,7 @@ class _UserProfileViewState extends State<UserProfileView> {
   @override
   void initState() {
     super.initState();
+    _pendingHealthScroll = widget.scrollToHealthCheck;
     Future.microtask(() async {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
       if (uid.isEmpty || !mounted) return;
@@ -60,6 +71,25 @@ class _UserProfileViewState extends State<UserProfileView> {
             ..addAll(u.healthConditions);
         });
       }
+      // Scroll to the Health Conditions card once the form has actually
+      // rendered with real content — doing this before the data loads
+      // would scroll to the wrong offset since the page height changes.
+      _maybeScrollToHealthSection();
+    });
+  }
+
+  void _maybeScrollToHealthSection() {
+    if (!_pendingHealthScroll) return;
+    _pendingHealthScroll = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _healthSectionKey.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+        alignment: 0.05, // land near the top of the viewport, not centered
+      );
     });
   }
 
@@ -299,14 +329,19 @@ class _UserProfileViewState extends State<UserProfileView> {
                       onChanged: (v) => setState(() => _activityLevel = v!),
                     ),
 
-                    // ── Health conditions ──────────────────────────────
-                    _HealthConditionsSection(
-                      selected: _conditions,
-                      onToggle: (cond) => setState(() {
-                        _conditions.contains(cond)
-                            ? _conditions.remove(cond)
-                            : _conditions.add(cond);
-                      }),
+                    // ── Health conditions — the "Health Check" section ──
+                    // Wrapped in a keyed container so the Home screen's
+                    // Health Check feature card can scroll straight here.
+                    Container(
+                      key: _healthSectionKey,
+                      child: _HealthConditionsSection(
+                        selected: _conditions,
+                        onToggle: (cond) => setState(() {
+                          _conditions.contains(cond)
+                              ? _conditions.remove(cond)
+                              : _conditions.add(cond);
+                        }),
+                      ),
                     ),
 
                     // ── Password ───────────────────────────────────────

@@ -183,21 +183,43 @@ class GeminiVisionService {
   }
 
   static const _prompt = r'''
-You are an expert nutrition label OCR and parser for supplement products.
+You are an expert nutrition label OCR and parser for supplement products,
+with additional expertise in detecting protein/amino ("nitrogen") spiking —
+the practice of adding cheap nitrogen-rich, low-value compounds to inflate a
+product's measured protein content on lab tests without providing real
+complete protein.
+
 Analyse ALL label images provided (may be multiple angles of the same product).
 
-RULES:
+RULES FOR NUTRITION EXTRACTION:
 - Use "Amount Per Serving" values, NOT "Per 100g".
 - For two-column tables (Per Serving | Per 100g), always take the FIRST number.
 - If a value is not present on the label, return 0 for numbers or "" for strings.
-- Return ONLY a valid JSON object — no explanation, no markdown fences.
 - For supplement rows like "Creatine Monohydrate 3g" — read the number after the name.
 - Units: protein/carbs/fat/fiber/sugar/saturated_fat/trans_fat/unsaturated_fat/creatine/bcaa/leucine/isoleucine/valine/glutamine/taurine are in GRAMS.
 - Units: sodium/potassium/cholesterol/caffeine/vitamin_c/calcium/iron/magnesium/zinc are in MILLIGRAMS.
 - Units: vitamin_d is in MICROGRAMS (µg).
 - serving_size is in grams (the numeric value only, e.g. 30 for "30g").
 
-Return exactly this JSON structure (include all keys even if value is 0 or ""):
+RULES FOR NITROGEN-SPIKING DETECTION:
+- Read the full ingredient list on the label.
+- Identify ANY compound commonly used for amino/nitrogen spiking, not just
+  creatine monohydrate. This includes (but is not limited to): free-form
+  glycine, taurine, glutamine, glutamic acid, arginine, beta-alanine, and
+  any other low-cost free amino acid or nitrogen-rich filler added in
+  disproportionate quantity relative to the product's actual complete
+  protein sources (e.g. whey, casein, egg, soy, pea protein).
+- For each compound you flag, give its exact name as printed on the label
+  and a short (max 15 words) plain-language reason it's a spiking concern.
+- Do NOT flag legitimate complete protein sources themselves (whey protein
+  concentrate/isolate, casein, egg protein, soy protein, pea protein, etc.).
+- Do NOT flag compounds present only in small, standard supporting doses
+  typical of legitimate formulation (e.g. a small standard creatine dose in
+  a dedicated creatine product is not itself spiking).
+- If no concerning compounds are found, return an empty array.
+
+Return ONLY a valid JSON object — no explanation, no markdown fences.
+Return exactly this JSON structure (include all keys even if value is 0, "", or []):
 {
   "product_name": "",
   "brand_name": "",
@@ -230,7 +252,10 @@ Return exactly this JSON structure (include all keys even if value is 0 or ""):
   "iron_mg": 0.0,
   "magnesium_mg": 0.0,
   "zinc_mg": 0.0,
-  "ingredients": ""
+  "ingredients": "",
+  "flagged_nitrogen_compounds": [
+    {"name": "", "reason": ""}
+  ]
 }
 ''';
 

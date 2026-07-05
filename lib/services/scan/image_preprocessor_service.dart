@@ -84,6 +84,19 @@ _PreprocessOutput _preprocessInIsolate(_PreprocessInput input) {
         (rotated.width != image.width || rotated.height != image.height);
     image = rotated;
 
+    const int maxDimension = 1600;
+    if (image.width > maxDimension || image.height > maxDimension) {
+      final scale = maxDimension / math.max(image.width, image.height);
+      final newW = (image.width * scale).round();
+      final newH = (image.height * scale).round();
+      image = img.copyResize(
+        image,
+        width: newW,
+        height: newH,
+        interpolation: img.Interpolation.average,
+      );
+    }
+
     // 3. Upscale if too small
     if (image.width < minWidth || image.height < minHeight) {
       final scale = targetWidth / image.width;

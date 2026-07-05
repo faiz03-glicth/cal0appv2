@@ -7,42 +7,34 @@ import 'package:cal0appv2/models/foodlog_model.dart';
 import 'package:cal0appv2/repositories/scan_repository.dart';
 import 'package:cal0appv2/repositories/foodlog_repository.dart';
 import 'package:cal0appv2/services/scan/ai_service.dart';
+import 'package:cal0appv2/services/scan/ingredient_authenticity_service.dart';
 import 'package:cal0appv2/services/scan/nutrition_extractor_service.dart';
 import 'package:cal0appv2/services/scan/image_preprocessor_service.dart';
 import 'package:cal0appv2/services/scan/ocr_text_cleaner_service.dart';
 import 'package:cal0appv2/services/scan/gemini_vision_service.dart';
-import 'package:cal0appv2/services/scan/ingredient_authenticity_service.dart';
 import 'package:cal0appv2/services/logs/debuglog_services.dart';
 import 'package:cal0appv2/services/logging/activity_logger.dart';
 import 'package:cal0appv2/models/logging/activity_log.dart';
 import 'package:cal0appv2/models/whey/whey_supplement_model.dart';
 import 'package:cal0appv2/repositories/whey_supplement_repository.dart';
+import 'package:cal0appv2/config/scan_thresholds.dart';
 
-// Re-exported so existing imports of `DetectedIngredient` from this file
-// (e.g. whey_verdict_card.dart) keep working unchanged. The database and
-// detection logic itself now live in one place:
-// services/scan/ingredient_authenticity_service.dart — see that file for
-// the single source of truth used by both the live scan flow and food
-// history.
 export 'package:cal0appv2/services/scan/ingredient_authenticity_service.dart'
     show DetectedIngredient;
 
-// ── Authenticity verdict enum ─────────────────────────────────────────────
-// Consumed by WheyVerdictCard for clear, unambiguous UI feedback. This is
-// the ML-driven verdict (can be authentic/spiked/plantBased/lowConf/
-// unknown, with a confidence score) — distinct from the deterministic
-// rule-based NitrogenCheckVerdict in IngredientAuthenticityService, which
-// only ever says authentic or non-authentic.
+class _AcquiredScan {
+  final List<File> imagesForGemini;
+  final List<String> mergedLines;
+  final CleanedOcrResult cleanedOcr;
+  final bool lowOcrQuality;
 
-enum AuthenticityVerdict {
-  authentic, // AI says Authentic, confidence ≥ 50%
-  spiked, // AI says Spiked, confidence ≥ 50%
-  plantBased, // AI says Plant-Based
-  lowConf, // AI ran but confidence < 50%
-  unknown, // AI didn't run (low OCR quality or no ingredient text)
+  const _AcquiredScan({
+    required this.imagesForGemini,
+    required this.mergedLines,
+    required this.cleanedOcr,
+    required this.lowOcrQuality,
+  });
 }
-
-// ── ScanViewModel ─────────────────────────────────────────────────────────
 
 class ScanViewModel extends ChangeNotifier {
   final ScanRepository _scanRepo;
@@ -94,7 +86,7 @@ class ScanViewModel extends ChangeNotifier {
   // AI verdict
   bool hasSuspiciousIngredients = false;
   double aiConfidence = 0.0;
-  String aiLabel = '';
+  String aiLabel = ''; // 'Authentic' | 'Spiked' | 'Plant-Based'
 
   // Quality flags
   bool lowOcrQuality = false;
@@ -103,39 +95,8 @@ class ScanViewModel extends ChangeNotifier {
   // Cleaner output
   double ocrConfidence = 0.0;
   List<String> uncertainWords = [];
-
   List<DetectedIngredient> detectedIngredients = [];
   bool geminiUsed = false;
-
-  // Set to true once the user manually edits the ingredient list and the
-  // verdict is recomputed from that edit via `updateIngredientsAndReanalyze`.
-  // The verdict card uses this to switch to a plain Authentic / Non-Authentic
-  // presentation instead of the full ML-confidence wording.
-  bool ingredientManuallyEdited = false;
-
-  // The last deterministic rule-based check, kept around for anything that
-  // wants the raw AuthenticityCheck object (e.g. AuthenticityVerdictCard)
-  // rather than the individual fields above.
-  AuthenticityCheck? lastAuthenticityCheck;
-
-  // ── Derived verdict (FIX #3) ──────────────────────────────────────────
-  // A single source of truth for the verdict UI — replaces scattered string
-  // comparisons spread across widgets.
-
-  AuthenticityVerdict get authenticityVerdict {
-    if (lowOcrQuality || aiLabel.isEmpty) return AuthenticityVerdict.unknown;
-    if (lowAiConfidence) return AuthenticityVerdict.lowConf;
-    switch (aiLabel) {
-      case 'Spiked':
-        return AuthenticityVerdict.spiked;
-      case 'Plant-Based':
-        return AuthenticityVerdict.plantBased;
-      case 'Authentic':
-        return AuthenticityVerdict.authentic;
-      default:
-        return AuthenticityVerdict.unknown;
-    }
-  }
 
   bool get showingOverlay =>
       isScanning &&
@@ -144,477 +105,338 @@ class ScanViewModel extends ChangeNotifier {
 
   String get verdictLabel {
     if (extractedResult == null) return '';
-
-    if (ingredientManuallyEdited) {
-      return hasSuspiciousIngredients
-          ? 'Non-Authentic — suspicious nitrogen compound found in edited ingredients'
-          : 'Authentic — no suspicious nitrogen compound found in edited ingredients';
-    }
-
     final pct = '${(aiConfidence * 100).toStringAsFixed(0)}%';
     if (lowOcrQuality) return 'Scan quality too low — try retaking the photo';
-    if (lowAiConfidence) {
+    if (lowAiConfidence)
       return 'AI confidence low ($pct) — please verify manually';
-    }
-    if (aiLabel == 'Plant-Based') {
+    if (aiLabel == 'Plant-Based')
       return 'Plant-Based Protein ($pct confidence)';
-    }
     return hasSuspiciousIngredients
         ? 'Potential amino spiking detected ($pct confidence)'
         : 'No suspicious ingredients found ($pct confidence)';
   }
 
-  // ── File format guard ─────────────────────────────────────────────────
+  // ── Public entry points ────────────────────────────────────────────────
 
-  static const _allowedExtensions = ['.jpg', '.jpeg', '.png'];
-
-  bool _hasValidImageExtension(File file) {
-    final path = file.path.toLowerCase();
-    return _allowedExtensions.any((ext) => path.endsWith(ext));
-  }
-
-  // ── Manual re-analysis after the user edits ANY field ───────────────────
-  //
-  // Called from the confirm sheet (via AuthenticityReanalysisMixin)
-  // whenever the user edits ingredients or any nutrient field. Delegates
-  // entirely to IngredientAuthenticityService — the same deterministic,
-  // rule-based nitrogen-compound scan used by food history — so both
-  // screens behave identically.
-
-  void updateIngredientsAndReanalyze(String editedText) {
-    final check = IngredientAuthenticityService.check(editedText);
-
-    ingredientManuallyEdited = true;
-    lastAuthenticityCheck = check;
-
-    if (extractedResult != null) {
-      extractedResult = extractedResult!.copyWith(
-        ingredientText: check.ingredientText,
-      );
-    }
-
-    detectedIngredients = check.allDetected;
-    hasSuspiciousIngredients = check.isNonAuthentic;
-    aiLabel = check.isNonAuthentic ? 'Spiked' : 'Authentic';
-    // Rule-based checks are deterministic, so we treat this as full
-    // confidence rather than routing through the ML confidence gate.
-    aiConfidence = 1.0;
-    lowAiConfidence = false;
-    lowOcrQuality = false;
-    errorMessage = null;
-
-    notifyListeners();
-  }
-
-  // ── Multi-angle scan pipeline ─────────────────────────────────────────
-  //
-  // FIX #1 — preprocessing is now off-thread (compute() inside
-  // ImagePreprocessorService). Additional await-points between stages
-  // let the Flutter scheduler repaint the overlay between steps.
-
-  Future<void> scanMultipleImages(List<File> imageFiles) async {
-    if (imageFiles.isEmpty) return;
-
-    if (imageFiles.any((f) => !_hasValidImageExtension(f))) {
-      _reset(imageFiles.first);
-      errorMessage = 'Wrong format file';
-      ActivityLogger.instance.log(
-        ActivityEventType.scanFailed,
-        errorCode: 'WRONG_FILE_FORMAT',
-        errorMessage: 'Unsupported file format uploaded',
-      );
-      _setStage(ScanStage.done);
-      isScanning = false;
-      notifyListeners();
-      return;
-    }
-
-    _reset(imageFiles.first);
-    final sw = Stopwatch()..start();
-    ActivityLogger.instance.log(ActivityEventType.scanInitiated);
-
-    try {
-      // Stage 1 – Prepare
-      _setStage(ScanStage.preparingImage);
-      await Future<void>.microtask(() {}); // yield to repaint overlay
-
-      // Stage 2 – Enhance (runs off-thread per image via compute())
-      _setStage(ScanStage.enhancingQuality);
-      await Future<void>.microtask(() {});
-
-      final prepResults = await Future.wait(
-        imageFiles.map((f) => _preprocessor.preprocess(f)),
-      );
-
-      // Stage 3 – OCR (google_mlkit runs its own thread pool)
-      _setStage(ScanStage.extractingText);
-      await Future<void>.microtask(() {});
-
-      final ocrResults = await Future.wait(
-        prepResults.map((pr) => _scanRepo.scanLabelLines(pr.processedFile)),
-      );
-
-      // Merge + deduplicate OCR lines
-      final seen = <String>{};
-      final mergedLines = <String>[];
-      for (final lines in ocrResults) {
-        for (final line in lines) {
-          final key = line.trim().toLowerCase();
-          if (key.isNotEmpty && seen.add(key)) mergedLines.add(line.trim());
-        }
-      }
-
-      // Fallback: if preprocessed yield was poor, also try originals
-      if (mergedLines.length < 6) {
-        final origResults = await Future.wait(
-          imageFiles.map((f) => _scanRepo.scanLabelLines(f)),
-        );
-        for (final lines in origResults) {
-          for (final line in lines) {
-            final key = line.trim().toLowerCase();
-            if (key.isNotEmpty && seen.add(key)) mergedLines.add(line.trim());
-          }
-        }
-      }
-
-      scannedLines = mergedLines;
-
-      final cleaned = _cleaner.clean(mergedLines);
-      cleanedOcr = cleaned;
-
-      final totalLines = ocrResults.fold(0, (a, b) => a + b.length);
-      ocrConfidence = totalLines > 0
-          ? ocrResults.fold(
-              0.0,
-              (sum, lines) =>
-                  sum + (cleaned.overallConfidence * lines.length / totalLines),
-            )
-          : cleaned.overallConfidence;
-      uncertainWords = cleaned.uncertainTokens;
-
-      scannedText = cleaned.fullText.isNotEmpty
-          ? cleaned.fullText
-          : mergedLines.join('\n');
-
-      lowOcrQuality =
-          _assessOcrQuality(mergedLines) < 0.35 &&
-          prepResults.every((p) => p.qualityScore < 0.35);
-      if (lowOcrQuality) {
-        errorMessage = 'Unreadable file, please upload picture with clear';
-      }
-
-      ActivityLogger.instance.log(
-        ActivityEventType.scanOcrCompleted,
-        ocrExtractedText: scannedText,
-        durationMs: sw.elapsedMilliseconds,
-        scanImagePath: imageFiles.first.path,
-        errorMessage: lowOcrQuality
-            ? 'Multi-angle OCR quality gate failed'
-            : null,
-      );
-
-      // Stage 4 – Extract nutrition
-      _setStage(ScanStage.analyzingIngredients);
-      isAnalyzing = true;
-      await Future<void>.microtask(() {}); // yield before heavy work
-
-      extractedResult = _extractor.extract(mergedLines);
-      if (cleanedOcr!.hasIngredients &&
-          extractedResult!.ingredientText.isEmpty) {
-        extractedResult = extractedResult!.copyWith(
-          ingredientText: cleanedOcr!.ingredientSection,
-        );
-      }
-      if (cleanedOcr!.productName.isNotEmpty &&
-          extractedResult!.productName.isEmpty) {
-        extractedResult = extractedResult!.copyWith(
-          productName: cleanedOcr!.productName,
-        );
-      }
-
-      final geminiResult = await _gemini.extractNutrition(imageFiles);
-      if (geminiResult.hasData) {
-        LogService.info('GeminiVision: succeeded — using Gemini values');
-        extractedResult = _applyGeminiResult(extractedResult!, geminiResult);
-        geminiUsed = true;
-      } else {
-        LogService.info('GeminiVision: unavailable — regex fallback');
-        final rawOcrText = scannedLines.join('\n');
-        extractedResult = _mergeNutritionFromOcr(
-          extractedResult!,
-          cleanedOcr!.nutritionSection,
-          rawOcrText,
-        );
-        geminiUsed = false;
-      }
-
-      // FIX #2 — notify after extractedResult is set so confirm sheet can fill
-      notifyListeners();
-
-      final textForDetection = _bestIngredientText(
-        extracted: extractedResult!.ingredientText,
-        cleaned: cleanedOcr!.ingredientSection,
-        fullOcr: scannedText ?? '',
-        allLines: scannedLines,
-      );
-      detectedIngredients = IngredientAuthenticityService.detectAll(
-        textForDetection,
-      );
-
-      // Stage 5 – AI inference
-      _setStage(ScanStage.generatingInsights);
-      await Future<void>.microtask(() {});
-
-      final ingredientText = extractedResult!.ingredientText.isNotEmpty
-          ? extractedResult!.ingredientText
-          : cleanedOcr!.ingredientSection.isNotEmpty
-          ? cleanedOcr!.ingredientSection
-          : scannedText ?? '';
-
-      if (_aiService.isReady && ingredientText.isNotEmpty && !lowOcrQuality) {
-        final aiSw = Stopwatch()..start();
-        final result = await _aiService.analyzeIngredients(ingredientText);
-
-        hasSuspiciousIngredients = result['isSpiked'] as bool;
-        aiConfidence = result['confidence'] as double;
-        aiLabel = result['label'] as String? ?? '';
-        lowAiConfidence = aiConfidence < 0.50;
-
-        if (hasSuspiciousIngredients &&
-            !detectedIngredients.any((d) => d.isAmSpiking)) {
-          lowAiConfidence = true;
-        }
-
-        ActivityLogger.instance.logScan(
-          ocrText: scannedText!,
-          label: aiLabel.isNotEmpty
-              ? aiLabel
-              : (hasSuspiciousIngredients ? 'SPIKED' : 'CLEAN'),
-          confidence: aiConfidence,
-          imagePath: imageFiles.first.path,
-          flagged: detectedIngredients.map((d) => d.name).toList(),
-          ms: aiSw.elapsedMilliseconds,
-        );
-      } else {
-        hasSuspiciousIngredients = false;
-        aiConfidence = 0.0;
-        aiLabel = '';
-        if (lowOcrQuality) {
-          ActivityLogger.instance.log(
-            ActivityEventType.aiPredictionLowConfidence,
-            ocrExtractedText: scannedText,
-            errorMessage: 'AI skipped: multi-angle OCR quality gate failed',
-            scanImagePath: imageFiles.first.path,
-          );
-        }
-      }
-
-      if (sw.elapsedMilliseconds > 15000) {
-        ActivityLogger.instance.log(
-          ActivityEventType.slowOperation,
-          durationMs: sw.elapsedMilliseconds,
-          errorMessage:
-              'Multi-angle pipeline > 15s for ${imageFiles.length} images',
-        );
-      }
-    } catch (e, st) {
-      errorMessage = 'Scan failed. Please try again with better lighting.';
-      ActivityLogger.instance.log(
-        ActivityEventType.scanFailed,
-        errorCode: 'MULTI_SCAN_PIPELINE_ERROR',
-        errorMessage: e.toString(),
-        stackTrace: st,
-      );
-    }
-
-    _setStage(ScanStage.done);
-    isScanning = false;
-    isAnalyzing = false;
-    notifyListeners();
-  }
-
-  // ── Single-image scan pipeline ────────────────────────────────────────
-
+  /// Single-photo scan pipeline.
   Future<void> scanImage(File imageFile) async {
-    if (!_hasValidImageExtension(imageFile)) {
-      _reset(imageFile);
-      errorMessage = 'Wrong format file';
-      ActivityLogger.instance.log(
-        ActivityEventType.scanFailed,
-        errorCode: 'WRONG_FILE_FORMAT',
-        errorMessage: 'Unsupported file format uploaded',
-      );
-      _setStage(ScanStage.done);
-      isScanning = false;
-      notifyListeners();
-      return;
-    }
-
     _reset(imageFile);
     final sw = Stopwatch()..start();
     ActivityLogger.instance.log(ActivityEventType.scanInitiated);
 
     try {
       _setStage(ScanStage.preparingImage);
-      await Future<void>.microtask(() {});
+      await Future<void>.delayed(const Duration(milliseconds: 80));
 
       _setStage(ScanStage.enhancingQuality);
-      await Future<void>.microtask(() {});
-      // FIX #1 — preprocessing now runs off-thread inside compute()
       final prepResult = await _preprocessor.preprocess(imageFile);
       preprocessResult = prepResult;
       preprocessedImageFile = prepResult.processedFile;
 
       _setStage(ScanStage.extractingText);
-      await Future<void>.microtask(() {});
-      scannedLines = await _scanRepo.scanLabelLines(prepResult.processedFile);
-      if (scannedLines.length < 4) {
+      var lines = await _scanRepo.scanLabelLines(prepResult.processedFile);
+      if (lines.length < 4) {
         final origLines = await _scanRepo.scanLabelLines(imageFile);
-        if (origLines.length > scannedLines.length) scannedLines = origLines;
+        if (origLines.length > lines.length) lines = origLines;
       }
 
-      final cleaned = _cleaner.clean(scannedLines);
-      cleanedOcr = cleaned;
-      ocrConfidence = cleaned.overallConfidence;
-      uncertainWords = cleaned.uncertainTokens;
-      scannedText = cleaned.fullText.isNotEmpty
-          ? cleaned.fullText
-          : scannedLines.join('\n');
+      final cleaned = _cleaner.clean(lines);
+      final acquired = _AcquiredScan(
+        imagesForGemini: [imageFile],
+        mergedLines: lines,
+        cleanedOcr: cleaned,
+        lowOcrQuality: _isLowQuality(cleaned, lines),
+      );
 
-      lowOcrQuality = _assessOcrQuality(scannedLines) < 0.35;
+      await _runAnalysisPipeline(
+        acquired: acquired,
+        sw: sw,
+        primaryImagePath: imageFile.path,
+        slowThresholdMs: ScanThresholds.slowSingleScanMs,
+        slowOpMessage: 'Enhanced scan pipeline > 9s',
+        errorCode: 'SCAN_PIPELINE_ERROR',
+      );
+    } catch (e, st) {
+      _handlePipelineError(e, st, 'SCAN_PIPELINE_ERROR');
+    }
+
+    _finishScan();
+  }
+
+  /// Multi-angle scan pipeline (3-5 photos), merged before analysis.
+  ///
+  /// Merge strategy:
+  ///   • Each image is preprocessed + OCR'd independently, in parallel
+  ///   • Lines are deduplicated (exact-match) — shared text counted once
+  ///   • For nutrition values: highest-confidence non-zero value wins
+  ///     (handled downstream by _applyGeminiResult / _mergeNutritionFromOcr)
+  Future<void> scanMultipleImages(List<File> imageFiles) async {
+    if (imageFiles.isEmpty) return;
+
+    _reset(imageFiles.first);
+    final sw = Stopwatch()..start();
+    ActivityLogger.instance.log(ActivityEventType.scanInitiated);
+
+    try {
+      _setStage(ScanStage.preparingImage);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      _setStage(ScanStage.enhancingQuality);
+      final prepResults = await Future.wait(
+        imageFiles.map((f) => _preprocessor.preprocess(f)),
+      );
+
+      _setStage(ScanStage.extractingText);
+      final ocrResults = await Future.wait(
+        prepResults.map((pr) => _scanRepo.scanLabelLines(pr.processedFile)),
+      );
+
+      var mergedLines = _dedupeLines(ocrResults);
+
+      // Fallback: if preprocessed yield was poor, also try originals.
+      if (mergedLines.length < 6) {
+        final origResults = await Future.wait(
+          imageFiles.map((f) => _scanRepo.scanLabelLines(f)),
+        );
+        mergedLines = _dedupeLines([...ocrResults, ...origResults]);
+      }
+
+      final cleaned = _cleaner.clean(mergedLines);
+
+      // Strictest quality gate: poor by both the cleaner AND every image's
+      // own preprocessing quality score.
+      final lowQuality =
+          _isLowQuality(cleaned, mergedLines) &&
+          prepResults.every(
+            (p) => p.qualityScore < ScanThresholds.lowOcrQualityCutoff,
+          );
+
+      final acquired = _AcquiredScan(
+        imagesForGemini: imageFiles,
+        mergedLines: mergedLines,
+        cleanedOcr: cleaned,
+        lowOcrQuality: lowQuality,
+      );
+
+      await _runAnalysisPipeline(
+        acquired: acquired,
+        sw: sw,
+        primaryImagePath: imageFiles.first.path,
+        slowThresholdMs: ScanThresholds.slowMultiScanMs,
+        slowOpMessage:
+            'Multi-angle pipeline > 15s for ${imageFiles.length} images',
+        errorCode: 'MULTI_SCAN_PIPELINE_ERROR',
+      );
+    } catch (e, st) {
+      _handlePipelineError(e, st, 'MULTI_SCAN_PIPELINE_ERROR');
+    }
+
+    _finishScan();
+  }
+
+  // ── Shared pipeline (was duplicated across both public methods) ────────
+
+  Future<void> _runAnalysisPipeline({
+    required _AcquiredScan acquired,
+    required Stopwatch sw,
+    required String primaryImagePath,
+    required int slowThresholdMs,
+    required String slowOpMessage,
+    required String errorCode,
+  }) async {
+    scannedLines = acquired.mergedLines;
+    cleanedOcr = acquired.cleanedOcr;
+    ocrConfidence = acquired.cleanedOcr.overallConfidence;
+    uncertainWords = acquired.cleanedOcr.uncertainTokens;
+    scannedText = acquired.cleanedOcr.fullText.isNotEmpty
+        ? acquired.cleanedOcr.fullText
+        : acquired.mergedLines.join('\n');
+    lowOcrQuality = acquired.lowOcrQuality;
+
+    ActivityLogger.instance.log(
+      ActivityEventType.scanOcrCompleted,
+      ocrExtractedText: scannedText,
+      durationMs: sw.elapsedMilliseconds,
+      scanImagePath: primaryImagePath,
+      errorMessage: lowOcrQuality ? 'OCR quality gate failed' : null,
+    );
+
+    _setStage(ScanStage.analyzingIngredients);
+    isAnalyzing = true;
+    notifyListeners();
+
+    // Nutrition extraction: baseline from OCR, refined by Gemini if available.
+    extractedResult = _extractor.extract(acquired.mergedLines);
+    if (cleanedOcr!.hasIngredients && extractedResult!.ingredientText.isEmpty) {
+      extractedResult = extractedResult!.copyWith(
+        ingredientText: cleanedOcr!.ingredientSection,
+      );
+    }
+    if (cleanedOcr!.productName.isNotEmpty &&
+        extractedResult!.productName.isEmpty) {
+      extractedResult = extractedResult!.copyWith(
+        productName: cleanedOcr!.productName,
+      );
+    }
+
+    final geminiResult = await _gemini.extractNutrition(
+      acquired.imagesForGemini,
+    );
+    if (geminiResult.hasData) {
+      LogService.info('GeminiVision: succeeded — using Gemini values');
+      extractedResult = _applyGeminiResult(extractedResult!, geminiResult);
+      geminiUsed = true;
+    } else {
+      LogService.info('GeminiVision: unavailable — regex fallback');
+      final rawOcrText = acquired.mergedLines.join('\n');
+      extractedResult = _mergeNutritionFromOcr(
+        extractedResult!,
+        cleanedOcr!.nutritionSection,
+        rawOcrText,
+      );
+      geminiUsed = false;
+    }
+
+    final textForDetection = _bestIngredientText(
+      extracted: extractedResult!.ingredientText,
+      cleaned: cleanedOcr!.ingredientSection,
+      fullOcr: scannedText ?? '',
+      allLines: acquired.mergedLines,
+    );
+    detectedIngredients = IngredientAuthenticityService.detectAll(
+      textForDetection,
+    );
+
+    _setStage(ScanStage.generatingInsights);
+
+    final ingredientText = extractedResult!.ingredientText.isNotEmpty
+        ? extractedResult!.ingredientText
+        : cleanedOcr!.ingredientSection.isNotEmpty
+        ? cleanedOcr!.ingredientSection
+        : scannedText ?? '';
+
+    if (_aiService.isReady && ingredientText.isNotEmpty && !lowOcrQuality) {
+      final aiSw = Stopwatch()..start();
+      final result = await _aiService.analyzeIngredients(ingredientText);
+
+      hasSuspiciousIngredients = result['isSpiked'] as bool;
+      aiConfidence = result['confidence'] as double;
+      aiLabel = result['label'] as String? ?? '';
+      lowAiConfidence = aiConfidence < ScanThresholds.lowAiConfidenceCutoff;
+
+      // Cross-check: if the model says "Spiked" but the rule-based detector
+      // found no *confirmed* spiking agent by name, treat the verdict as
+      // uncertain rather than confidently flagging the user.
+      if (hasSuspiciousIngredients &&
+          !IngredientAuthenticityService.hasConfirmedSpikingAgent(
+            detectedIngredients,
+          )) {
+        lowAiConfidence = true;
+      }
+
+      ActivityLogger.instance.logScan(
+        ocrText: scannedText!,
+        label: aiLabel.isNotEmpty
+            ? aiLabel
+            : (hasSuspiciousIngredients ? 'SPIKED' : 'CLEAN'),
+        confidence: aiConfidence,
+        imagePath: primaryImagePath,
+        flagged: detectedIngredients.map((d) => d.name).toList(),
+        ms: aiSw.elapsedMilliseconds,
+      );
+    } else {
+      hasSuspiciousIngredients = false;
+      aiConfidence = 0.0;
+      aiLabel = '';
       if (lowOcrQuality) {
-        errorMessage = 'Unreadable file, please upload picture with clear';
-      }
-
-      ActivityLogger.instance.log(
-        ActivityEventType.scanOcrCompleted,
-        ocrExtractedText: scannedText,
-        durationMs: sw.elapsedMilliseconds,
-        scanImagePath: imageFile.path,
-        errorMessage: lowOcrQuality ? 'OCR quality gate failed' : null,
-      );
-
-      _setStage(ScanStage.analyzingIngredients);
-      isAnalyzing = true;
-      await Future<void>.microtask(() {});
-
-      extractedResult = _extractor.extract(scannedLines);
-      if (cleanedOcr!.hasIngredients &&
-          extractedResult!.ingredientText.isEmpty) {
-        extractedResult = extractedResult!.copyWith(
-          ingredientText: cleanedOcr!.ingredientSection,
-        );
-      }
-      if (cleanedOcr!.productName.isNotEmpty &&
-          extractedResult!.productName.isEmpty) {
-        extractedResult = extractedResult!.copyWith(
-          productName: cleanedOcr!.productName,
-        );
-      }
-
-      final geminiResult = await _gemini.extractNutrition([imageFile]);
-      if (geminiResult.hasData) {
-        LogService.info('GeminiVision: succeeded — using Gemini values');
-        extractedResult = _applyGeminiResult(extractedResult!, geminiResult);
-        geminiUsed = true;
-      } else {
-        LogService.info('GeminiVision: unavailable — regex fallback');
-        final rawOcrText = scannedLines.join('\n');
-        extractedResult = _mergeNutritionFromOcr(
-          extractedResult!,
-          cleanedOcr!.nutritionSection,
-          rawOcrText,
-        );
-        geminiUsed = false;
-      }
-
-      // FIX #2 — notify immediately so confirm sheet sees real data
-      notifyListeners();
-
-      final textForDetection = _bestIngredientText(
-        extracted: extractedResult!.ingredientText,
-        cleaned: cleanedOcr!.ingredientSection,
-        fullOcr: scannedText ?? '',
-        allLines: scannedLines,
-      );
-      detectedIngredients = IngredientAuthenticityService.detectAll(
-        textForDetection,
-      );
-
-      _setStage(ScanStage.generatingInsights);
-      await Future<void>.microtask(() {});
-
-      final ingredientText = extractedResult!.ingredientText.isNotEmpty
-          ? extractedResult!.ingredientText
-          : cleanedOcr!.ingredientSection.isNotEmpty
-          ? cleanedOcr!.ingredientSection
-          : scannedText ?? '';
-
-      if (_aiService.isReady && ingredientText.isNotEmpty && !lowOcrQuality) {
-        final aiSw = Stopwatch()..start();
-        final result = await _aiService.analyzeIngredients(ingredientText);
-
-        hasSuspiciousIngredients = result['isSpiked'] as bool;
-        aiConfidence = result['confidence'] as double;
-        aiLabel = result['label'] as String? ?? '';
-        lowAiConfidence = aiConfidence < 0.50;
-
-        if (hasSuspiciousIngredients &&
-            !detectedIngredients.any((d) => d.isAmSpiking)) {
-          lowAiConfidence = true;
-        }
-
-        ActivityLogger.instance.logScan(
-          ocrText: scannedText!,
-          label: aiLabel.isNotEmpty
-              ? aiLabel
-              : (hasSuspiciousIngredients ? 'SPIKED' : 'CLEAN'),
-          confidence: aiConfidence,
-          imagePath: imageFile.path,
-          flagged: detectedIngredients.map((d) => d.name).toList(),
-          ms: aiSw.elapsedMilliseconds,
-        );
-      } else if (lowOcrQuality) {
-        hasSuspiciousIngredients = false;
-        aiConfidence = 0.0;
-        aiLabel = '';
         ActivityLogger.instance.log(
           ActivityEventType.aiPredictionLowConfidence,
           ocrExtractedText: scannedText,
           errorMessage: 'AI skipped: OCR quality gate failed',
-          scanImagePath: imageFile.path,
-        );
-      } else {
-        hasSuspiciousIngredients = false;
-        aiConfidence = 0.0;
-        aiLabel = '';
-      }
-
-      if (sw.elapsedMilliseconds > 9000) {
-        ActivityLogger.instance.log(
-          ActivityEventType.slowOperation,
-          durationMs: sw.elapsedMilliseconds,
-          errorMessage: 'Enhanced scan pipeline > 9s',
+          scanImagePath: primaryImagePath,
         );
       }
-    } catch (e, st) {
-      errorMessage = 'Scan failed. Please try again with better lighting.';
-      ActivityLogger.instance.log(
-        ActivityEventType.scanFailed,
-        errorCode: 'SCAN_PIPELINE_ERROR',
-        errorMessage: e.toString(),
-        stackTrace: st,
-      );
     }
 
+    if (sw.elapsedMilliseconds > slowThresholdMs) {
+      ActivityLogger.instance.log(
+        ActivityEventType.slowOperation,
+        durationMs: sw.elapsedMilliseconds,
+        errorMessage: slowOpMessage,
+      );
+    }
+  }
+
+  // ── Small helpers extracted for clarity ────────────────────────────────
+
+  /// Deduplicates OCR lines across multiple images, preserving first-seen
+  /// order (case-insensitive, whitespace-trimmed comparison).
+  List<String> _dedupeLines(List<List<String>> allLines) {
+    final seen = <String>{};
+    final merged = <String>[];
+    for (final lines in allLines) {
+      for (final line in lines) {
+        final key = line.trim().toLowerCase();
+        if (key.isNotEmpty && seen.add(key)) {
+          merged.add(line.trim());
+        }
+      }
+    }
+    return merged;
+  }
+
+  /// Single source of truth for the OCR-quality gate. Prefers the rich,
+  /// multi-factor score from OcrTextCleanerService; falls back to the
+  /// cruder ASCII-ratio check only if cleaning yielded nothing to score.
+  bool _isLowQuality(CleanedOcrResult cleaned, List<String> rawLines) {
+    if (cleaned.wordConfidence.isNotEmpty) {
+      return cleaned.overallConfidence < ScanThresholds.lowOcrQualityCutoff;
+    }
+    return _assessOcrQualityFallback(rawLines) <
+        ScanThresholds.lowOcrQualityCutoff;
+  }
+
+  /// Defensive fallback only — used when OcrTextCleanerService had nothing
+  /// to score from (e.g. zero lines survived Stage 1 cleaning).
+  double _assessOcrQualityFallback(List<String> lines) {
+    if (lines.isEmpty) return 0.0;
+    int good = 0;
+    for (final line in lines) {
+      final t = line.trim();
+      if (t.isEmpty) continue;
+      final ascii = t.runes
+          .where(
+            (c) =>
+                (c >= 65 && c <= 90) ||
+                (c >= 97 && c <= 122) ||
+                (c >= 48 && c <= 57),
+          )
+          .length;
+      if (ascii / t.length >= ScanThresholds.minReadableCharRatio) good++;
+    }
+    return good / lines.length;
+  }
+
+  void _handlePipelineError(Object e, StackTrace st, String errorCode) {
+    errorMessage = 'Scan failed. Please try again with better lighting.';
+    ActivityLogger.instance.log(
+      ActivityEventType.scanFailed,
+      errorCode: errorCode,
+      errorMessage: e.toString(),
+      stackTrace: st,
+    );
+  }
+
+  void _finishScan() {
     _setStage(ScanStage.done);
     isScanning = false;
     isAnalyzing = false;
     notifyListeners();
   }
 
-  // ── Private helpers ───────────────────────────────────────────────────
-
+  // ── Apply Gemini result to ScanResultModel ─────────────────────────────
+  // Overwrites all fields Gemini found. Keeps existing values for anything
+  // Gemini returned as 0 (meaning it wasn't found on the label).
   ScanResultModel _applyGeminiResult(
     ScanResultModel existing,
     GeminiNutritionResult gemini,
@@ -638,6 +460,7 @@ class ScanViewModel extends ChangeNotifier {
     );
   }
 
+  // ── Best ingredient text helper ────────────────────────────────────────
   String _bestIngredientText({
     required String extracted,
     required String cleaned,
@@ -650,6 +473,13 @@ class ScanViewModel extends ChangeNotifier {
     return allLines.join(' ');
   }
 
+  // ── OCR nutrition number parser (unchanged from original) ──────────────
+  //
+  // NOTE FOR FUTURE REFACTOR: this regex-based nutrition parser is domain
+  // logic that arguably belongs in NutritionExtractorService rather than
+  // the ViewModel — flagged here rather than moved in this pass, since it
+  // touches parsing behaviour rather than pure structure and deserves its
+  // own reviewed change.
   ScanResultModel _mergeNutritionFromOcr(
     ScanResultModel result,
     String nutritionSection,
@@ -729,20 +559,18 @@ class ScanViewModel extends ChangeNotifier {
   );
 
   int? _parseNutritionValue(String text, RegExp pattern) {
-    final clean = _stripKj(text);
-    final match = pattern.firstMatch(clean);
+    final match = pattern.firstMatch(_stripKj(text));
     if (match == null) return null;
     return int.tryParse(match.group(1) ?? '');
   }
 
   double? _parseNutritionDouble(String text, RegExp pattern) {
-    final clean = _stripKj(text);
-    final match = pattern.firstMatch(clean);
+    final match = pattern.firstMatch(_stripKj(text));
     if (match == null) return null;
     return double.tryParse(match.group(1) ?? '');
   }
 
-  // ── Save ──────────────────────────────────────────────────────────────
+  // ── Save ────────────────────────────────────────────────────────────────
 
   Future<bool> saveScanResult({
     required String uid,
@@ -775,17 +603,6 @@ class ScanViewModel extends ChangeNotifier {
         servingUnit: confirmed.servingUnit,
         sugar: confirmed.sugar,
         sodium: confirmed.sodium,
-        // Supplement compounds + ingredient text carried over so the
-        // history edit screen has the same fields, and can re-run the
-        // same Authentic / Non-Authentic check later.
-        creatineMonohydrate: confirmed.creatineMonohydrate,
-        bcaa: confirmed.bcaa,
-        leucine: confirmed.leucine,
-        isoleucine: confirmed.isoleucine,
-        valine: confirmed.valine,
-        glutamine: confirmed.glutamine,
-        taurine: confirmed.taurine,
-        ingredientText: confirmed.ingredientText,
         imagePath: scannedImageFile?.path,
         scanConfidence: confirmed.extractionConfidence,
         scanAnalysisResult: analysisResult,
@@ -799,9 +616,9 @@ class ScanViewModel extends ChangeNotifier {
         brandName: brandName.trim(),
         productName: log.foodLogName,
         calories: log.calorieIntake,
-        protein: log.protein,
-        carbs: log.carbs,
-        fat: log.fats,
+        protein: log.protein ?? 0,
+        carbs: log.carbs ?? 0,
+        fat: log.fats ?? 0,
         sugar: log.sugar,
         sodium: log.sodium,
         servingSize: log.servingSize,
@@ -840,9 +657,6 @@ class ScanViewModel extends ChangeNotifier {
   }
 
   String _buildAnalysisResult() {
-    if (ingredientManuallyEdited) {
-      return hasSuspiciousIngredients ? 'NON-AUTHENTIC' : 'AUTHENTIC';
-    }
     final pct = '${(aiConfidence * 100).toStringAsFixed(0)}%';
     switch (aiLabel) {
       case 'Spiked':
@@ -859,25 +673,6 @@ class ScanViewModel extends ChangeNotifier {
   void _setStage(ScanStage stage) {
     currentStage = stage;
     notifyListeners();
-  }
-
-  double _assessOcrQuality(List<String> lines) {
-    if (lines.isEmpty) return 0.0;
-    int good = 0;
-    for (final line in lines) {
-      final t = line.trim();
-      if (t.isEmpty) continue;
-      final ascii = t.runes
-          .where(
-            (c) =>
-                (c >= 65 && c <= 90) ||
-                (c >= 97 && c <= 122) ||
-                (c >= 48 && c <= 57),
-          )
-          .length;
-      if (t.isNotEmpty && ascii / t.length >= 0.55) good++;
-    }
-    return good / lines.length;
   }
 
   void _reset(File imageFile) {
@@ -902,8 +697,6 @@ class ScanViewModel extends ChangeNotifier {
     lowOcrQuality = false;
     lowAiConfidence = false;
     geminiUsed = false;
-    ingredientManuallyEdited = false;
-    lastAuthenticityCheck = null;
     scannedImageFile = imageFile;
     notifyListeners();
   }
@@ -926,8 +719,6 @@ class ScanViewModel extends ChangeNotifier {
     lowOcrQuality = false;
     lowAiConfidence = false;
     geminiUsed = false;
-    ingredientManuallyEdited = false;
-    lastAuthenticityCheck = null;
     scannedImageFile = null;
     currentStage = ScanStage.idle;
     isScanning = false;

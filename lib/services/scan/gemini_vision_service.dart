@@ -93,7 +93,15 @@ class GeminiNutritionResult {
 
   static const empty = GeminiNutritionResult();
 
-  bool get hasData => isSuccess && (calories > 0 || protein > 0);
+  bool get hasData =>
+      isSuccess &&
+      (productName.isNotEmpty ||
+          ingredientText.isNotEmpty ||
+          calories > 0 ||
+          protein > 0 ||
+          carbs > 0 ||
+          fat > 0 ||
+          sodium > 0);
 }
 
 // ── Service ───────────────────────────────────────────────────────────────

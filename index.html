@@ -18,6 +18,7 @@
   .qr-wrap { background: #f1f5f9; padding: 16px; border-radius: 12px; display: inline-block; margin-bottom: 1rem; }
   .qr-label { color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.75rem; }
   hr { border: none; border-top: 1px solid #334155; margin: 1.5rem 0; }
+  a.direct { color: #60a5fa; font-size: 0.8rem; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -33,6 +34,11 @@
     <div class="qr-wrap" id="qrcode"></div>
 
     <p class="note">Android only. You may need to allow "install from unknown sources".</p>
+
+    <hr>
+
+    <p class="note">Direct link to this exact build:</p>
+    <a class="direct" id="versioned-link" href="#">loading…</a>
   </div>
 
   <script>
@@ -47,11 +53,26 @@
       correctLevel: QRCode.CorrectLevel.M
     });
 
-    // Fetch the real version number baked in at build time
     fetch('/version.txt?t=' + Date.now())
       .then(function(res) { return res.text(); })
-      .then(function(v) { document.getElementById('version').textContent = v.trim(); })
-      .catch(function() { document.getElementById('version').textContent = 'unknown'; });
+      .then(function(v) {
+        v = v.trim(); // e.g. "1.0.0+8"
+        document.getElementById('version').textContent = v;
+
+        var parts = v.split('+');
+        var buildName = parts[0];
+        var buildNumber = parts[1] || '0';
+        var versionedFilename = 'cal0app-v' + buildName + '-build' + buildNumber + '.apk';
+        var versionedUrl = window.location.origin + '/' + versionedFilename;
+
+        var link = document.getElementById('versioned-link');
+        link.href = versionedUrl;
+        link.textContent = versionedFilename;
+      })
+      .catch(function() {
+        document.getElementById('version').textContent = 'unknown';
+        document.getElementById('versioned-link').textContent = 'unavailable';
+      });
   </script>
 </body>
 </html>

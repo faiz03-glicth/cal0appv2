@@ -271,26 +271,26 @@ class _AddFoodModal extends StatelessWidget {
               ),
 
               // ── Supplement ──────────────────────────────────────────
-              _ActionCard(
-                icon: Icons.science_outlined,
-                label: 'Supplement',
-                subtitle: 'Whey / protein',
-                iconBg: const Color(0xFFEEEDFE),
-                iconColor: const Color(0xFF534AB7),
-                onTap: () {
-                  final foodLogVm = context.read<FoodLogViewModel>();
-                  Navigator.pop(context);
-                  showModalBottomSheet(
-                    context: scaffoldContext,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => ChangeNotifierProvider.value(
-                      value: foodLogVm,
-                      child: const FoodSheet(isEdit: false),
-                    ),
-                  );
-                },
-              ),
+              // _ActionCard(
+              //   icon: Icons.science_outlined,
+              //   label: 'Supplement',
+              //   subtitle: 'Whey / protein',
+              //   iconBg: const Color(0xFFEEEDFE),
+              //   iconColor: const Color(0xFF534AB7),
+              //   onTap: () {
+              //     final foodLogVm = context.read<FoodLogViewModel>();
+              //     Navigator.pop(context);
+              //     showModalBottomSheet(
+              //       context: scaffoldContext,
+              //       isScrollControlled: true,
+              //       backgroundColor: Colors.transparent,
+              //       builder: (_) => ChangeNotifierProvider.value(
+              //         value: foodLogVm,
+              //         child: const FoodSheet(isEdit: false),
+              //       ),
+              //     );
+              //   },
+              // ),
             ],
           ),
         ],

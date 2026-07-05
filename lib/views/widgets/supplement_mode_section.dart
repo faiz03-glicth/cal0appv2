@@ -5,16 +5,6 @@ import 'package:cal0appv2/views/widgets/editable_ingredient_field.dart';
 import 'package:cal0appv2/views/widgets/authenticity_verdict_card.dart';
 import 'package:cal0appv2/services/scan/ingredient_authenticity_service.dart';
 
-/// The ONE Supplements on/off block used by every food edit screen —
-/// the diary quick-edit sheet, the food history edit sheet, and anywhere
-/// else a food entry can be edited. Toggle, ingredient field, supplement
-/// compound fields, and the live Authentic/Non-Authentic preview all live
-/// here exactly once; callers just wire controllers and a toggle callback.
-///
-/// OFF = Normal Food Logging — this widget renders only the toggle row,
-/// nothing else. No ingredient field, no authenticity check.
-/// ON = Whey Supplement — reveals the ingredient list, the supplement
-/// compound fields, and the live verdict card that updates as you type.
 class SupplementModeSection extends StatelessWidget {
   final bool isSupplementMode;
   final ValueChanged<bool> onToggle;
@@ -28,14 +18,7 @@ class SupplementModeSection extends StatelessWidget {
   final TextEditingController glutamineCtrl;
   final TextEditingController taurineCtrl;
 
-  /// The live re-check result to preview. Null shows the "add ingredients
-  /// to check" placeholder state on the verdict card.
   final AuthenticityCheck? liveCheck;
-
-  /// Optional per-field callbacks for callers (like FoodLogViewModel-backed
-  /// screens) that need to mirror controller text into their own state on
-  /// every change. Screens using purely local controllers can omit these —
-  /// the controllers themselves are read directly at save time.
   final ValueChanged<String>? onCreatineChanged;
   final ValueChanged<String>? onBcaaChanged;
   final ValueChanged<String>? onLeucineChanged;

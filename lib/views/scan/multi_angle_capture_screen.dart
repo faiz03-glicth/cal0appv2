@@ -535,6 +535,20 @@ class _SlotCard extends StatelessWidget {
   }
 }
 
+// REPLACE the existing _SlotThumbnail class in
+// lib/views/scan/multi_angle_capture_screen.dart with this version.
+//
+// WHAT CHANGED:
+// 1. Added `errorBuilder` to Image.file() so a missing/unreadable file
+//    shows a graceful "broken image" placeholder instead of the raw
+//    exception text overflowing the thumbnail box.
+// 2. Added an existsSync() check before attempting to render, so the
+//    common case (file already gone) skips straight to the fallback
+//    instead of even trying to decode a missing file.
+// 3. Tapping the broken-image placeholder still lets the user re-capture
+//    that slot (same onCapture callback the whole card already uses),
+//    so a lost photo doesn't strand them.
+
 class _SlotThumbnail extends StatelessWidget {
   final _AngleSlot slot;
   const _SlotThumbnail({required this.slot});
@@ -543,7 +557,13 @@ class _SlotThumbnail extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = C0Theme.of(context);
 
-    if (slot.captured) {
+    // File may have been cleared from cache/temp storage between capture
+    // and this rebuild (common with camera-sourced images). Check first
+    // so we skip straight to the fallback instead of letting Image.file
+    // throw and render raw exception text.
+    final fileGone = slot.captured && !slot.image!.existsSync();
+
+    if (slot.captured && !fileGone) {
       return Stack(
         children: [
           ClipRRect(
@@ -553,6 +573,11 @@ class _SlotThumbnail extends StatelessWidget {
               width: 64,
               height: 64,
               fit: BoxFit.cover,
+              // Defense-in-depth: even if existsSync() passed, the file
+              // could still fail to decode (deleted a moment later, or
+              // corrupted). Show a clean fallback instead of raw
+              // exception text overflowing the box.
+              errorBuilder: (context, error, stackTrace) => _brokenThumbnail(c),
             ),
           ),
           Positioned(
@@ -573,7 +598,11 @@ class _SlotThumbnail extends StatelessWidget {
       );
     }
 
-    // Empty placeholder
+    if (fileGone) {
+      return _brokenThumbnail(c, showRetakeHint: true);
+    }
+
+    // Empty placeholder (never captured yet)
     return Container(
       width: 64,
       height: 64,
@@ -594,8 +623,36 @@ class _SlotThumbnail extends StatelessWidget {
       ),
     );
   }
-}
 
+  Widget _brokenThumbnail(dynamic c, {bool showRetakeHint = false}) {
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: c.background,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: c.warning.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.broken_image_outlined, color: c.warning, size: 22),
+          if (showRetakeHint) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Retake',
+              style: TextStyle(
+                color: c.warning,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 // ── Analyse button ─────────────────────────────────────────────────────────
 
 class _AnalyseButton extends StatelessWidget {

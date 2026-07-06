@@ -18,6 +18,7 @@ import 'package:cal0appv2/models/logging/activity_log.dart';
 import 'package:cal0appv2/models/whey/whey_supplement_model.dart';
 import 'package:cal0appv2/repositories/whey_supplement_repository.dart';
 import 'package:cal0appv2/services/config/scan_thresholds.dart';
+
 export 'package:cal0appv2/services/scan/ingredient_authenticity_service.dart'
     show DetectedIngredient;
 
@@ -161,12 +162,6 @@ class ScanViewModel extends ChangeNotifier {
   }
 
   // ── Manual re-analysis after the user edits ANY field ───────────────────
-  //
-  // Called from the confirm sheet (via AuthenticityReanalysisMixin)
-  // whenever the user edits ingredients or any nutrient field. Delegates
-  // entirely to IngredientAuthenticityService — the same deterministic,
-  // rule-based nitrogen-compound scan used by food history — so both
-  // screens behave identically.
 
   void updateIngredientsAndReanalyze(String editedText) {
     final check = IngredientAuthenticityService.check(editedText);
@@ -183,8 +178,6 @@ class ScanViewModel extends ChangeNotifier {
     detectedIngredients = check.allDetected;
     hasSuspiciousIngredients = check.isNonAuthentic;
     aiLabel = check.isNonAuthentic ? 'Spiked' : 'Authentic';
-    // Rule-based checks are deterministic, so we treat this as full
-    // confidence rather than routing through the ML confidence gate.
     aiConfidence = 1.0;
     lowAiConfidence = false;
     lowOcrQuality = false;
@@ -598,6 +591,14 @@ class ScanViewModel extends ChangeNotifier {
 
   // ── Private helpers ───────────────────────────────────────────────────
 
+  // FIX (nutrition auto-fill bug, spot #1): previously this only copied 9
+  // fields (productName, calories, protein, carbs, fat, sugar, sodium,
+  // servingSize, ingredientText) from Gemini's result onto extractedResult,
+  // silently discarding the other 21 fields Gemini actually extracted
+  // (fiber, saturatedFat, transFat, unsaturatedFat, cholesterol, potassium,
+  // creatine, bcaa, leucine, isoleucine, valine, glutamine, taurine,
+  // caffeine, vitaminC, vitaminD, calcium, iron, magnesium, zinc,
+  // brandName, servingsPerContainer). Now copies everything Gemini found.
   ScanResultModel _applyGeminiResult(
     ScanResultModel existing,
     GeminiNutritionResult gemini,
@@ -606,15 +607,51 @@ class ScanViewModel extends ChangeNotifier {
       productName: gemini.productName.isNotEmpty
           ? gemini.productName
           : existing.productName,
+      brandName: gemini.brandName.isNotEmpty
+          ? gemini.brandName
+          : existing.brandName,
       calories: gemini.calories > 0 ? gemini.calories : existing.calories,
       protein: gemini.protein > 0 ? gemini.protein : existing.protein,
       carbs: gemini.carbs > 0 ? gemini.carbs : existing.carbs,
       fat: gemini.fat > 0 ? gemini.fat : existing.fat,
       sugar: gemini.sugar > 0 ? gemini.sugar : existing.sugar,
+      fiber: gemini.fiber > 0 ? gemini.fiber : existing.fiber,
+      saturatedFat: gemini.saturatedFat > 0
+          ? gemini.saturatedFat
+          : existing.saturatedFat,
+      transFat: gemini.transFat > 0 ? gemini.transFat : existing.transFat,
+      unsaturatedFat: gemini.unsaturatedFat > 0
+          ? gemini.unsaturatedFat
+          : existing.unsaturatedFat,
+      cholesterol: gemini.cholesterol > 0
+          ? gemini.cholesterol
+          : existing.cholesterol,
       sodium: gemini.sodium > 0 ? gemini.sodium : existing.sodium,
+      potassium: gemini.potassium > 0 ? gemini.potassium : existing.potassium,
+      creatineMonohydrate: gemini.creatineMonohydrate > 0
+          ? gemini.creatineMonohydrate
+          : existing.creatineMonohydrate,
+      bcaa: gemini.bcaa > 0 ? gemini.bcaa : existing.bcaa,
+      leucine: gemini.leucine > 0 ? gemini.leucine : existing.leucine,
+      isoleucine: gemini.isoleucine > 0
+          ? gemini.isoleucine
+          : existing.isoleucine,
+      valine: gemini.valine > 0 ? gemini.valine : existing.valine,
+      glutamine: gemini.glutamine > 0 ? gemini.glutamine : existing.glutamine,
+      taurine: gemini.taurine > 0 ? gemini.taurine : existing.taurine,
+      caffeine: gemini.caffeine > 0 ? gemini.caffeine : existing.caffeine,
+      vitaminC: gemini.vitaminC > 0 ? gemini.vitaminC : existing.vitaminC,
+      vitaminD: gemini.vitaminD > 0 ? gemini.vitaminD : existing.vitaminD,
+      calcium: gemini.calcium > 0 ? gemini.calcium : existing.calcium,
+      iron: gemini.iron > 0 ? gemini.iron : existing.iron,
+      magnesium: gemini.magnesium > 0 ? gemini.magnesium : existing.magnesium,
+      zinc: gemini.zinc > 0 ? gemini.zinc : existing.zinc,
       servingSize: gemini.servingSize > 0
           ? gemini.servingSize
           : existing.servingSize,
+      servingsPerContainer: gemini.servingsPerContainer > 0
+          ? gemini.servingsPerContainer
+          : existing.servingsPerContainer,
       ingredientText: gemini.ingredientText.isNotEmpty
           ? gemini.ingredientText
           : existing.ingredientText,
@@ -727,6 +764,16 @@ class ScanViewModel extends ChangeNotifier {
 
   // ── Save ──────────────────────────────────────────────────────────────
 
+  // FIX (nutrition auto-fill bug, spot #2): previously only 15 fields were
+  // passed from `confirmed` (ScanResultModel) onto the FoodLogModel being
+  // saved — fiber, saturatedFat, transFat, unsaturatedFat, cholesterol,
+  // potassium, caffeine, vitaminC, vitaminD, calcium, iron, magnesium, zinc
+  // were dropped here even when they DID make it into `confirmed`. Now
+  // every field ScanResultModel has is passed through. Fields FoodLogModel
+  // has that ScanResultModel does not capture (addedSugar, omega3/6,
+  // phosphorus, selenium, vitaminA, B-vitamins, vitaminE/K, folate,
+  // waterMl) are left at their default — the scan pipeline genuinely
+  // doesn't extract those yet, so there's nothing to pass through for them.
   Future<bool> saveScanResult({
     required String uid,
     required ScanResultModel confirmed,
@@ -758,9 +805,21 @@ class ScanViewModel extends ChangeNotifier {
         servingUnit: confirmed.servingUnit,
         sugar: confirmed.sugar,
         sodium: confirmed.sodium,
-        // Supplement compounds + ingredient text carried over so the
-        // history edit screen has the same fields, and can re-run the
-        // same Authentic / Non-Authentic check later.
+        // Previously missing — now passed through:
+        fiber: confirmed.fiber,
+        saturatedFat: confirmed.saturatedFat,
+        transFat: confirmed.transFat,
+        unsaturatedFat: confirmed.unsaturatedFat,
+        cholesterol: confirmed.cholesterol,
+        potassium: confirmed.potassium,
+        caffeine: confirmed.caffeine,
+        vitaminC: confirmed.vitaminC,
+        vitaminD: confirmed.vitaminD,
+        calcium: confirmed.calcium,
+        iron: confirmed.iron,
+        magnesium: confirmed.magnesium,
+        zinc: confirmed.zinc,
+        // Already present before this fix:
         creatineMonohydrate: confirmed.creatineMonohydrate,
         bcaa: confirmed.bcaa,
         leucine: confirmed.leucine,
@@ -779,7 +838,9 @@ class ScanViewModel extends ChangeNotifier {
       final wheyDoc = WheySupplementModel(
         id: log.foodLogID,
         userId: uid,
-        brandName: brandName.trim(),
+        brandName: brandName.trim().isNotEmpty
+            ? brandName.trim()
+            : confirmed.brandName,
         productName: log.foodLogName,
         calories: log.calorieIntake,
         protein: log.protein,
@@ -859,8 +920,9 @@ class ScanViewModel extends ChangeNotifier {
           )
           .length;
       if (t.isNotEmpty &&
-          ascii / t.length >= ScanThresholds.minReadableCharRatio)
+          ascii / t.length >= ScanThresholds.minReadableCharRatio) {
         good++;
+      }
     }
     return good / lines.length;
   }

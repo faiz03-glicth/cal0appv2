@@ -59,8 +59,6 @@ class ScanViewModel extends ChangeNotifier {
     });
   }
 
-  // ── Observable state ──────────────────────────────────────────────────
-
   ScanStage currentStage = ScanStage.idle;
 
   bool isScanning = false;
@@ -95,20 +93,8 @@ class ScanViewModel extends ChangeNotifier {
   List<DetectedIngredient> detectedIngredients = [];
   bool geminiUsed = false;
 
-  // Set to true once the user manually edits the ingredient list and the
-  // verdict is recomputed from that edit via `updateIngredientsAndReanalyze`.
-  // The verdict card uses this to switch to a plain Authentic / Non-Authentic
-  // presentation instead of the full ML-confidence wording.
   bool ingredientManuallyEdited = false;
-
-  // The last deterministic rule-based check, kept around for anything that
-  // wants the raw AuthenticityCheck object (e.g. AuthenticityVerdictCard)
-  // rather than the individual fields above.
   AuthenticityCheck? lastAuthenticityCheck;
-
-  // ── Derived verdict ────────────────────────────────────────────────────
-  // A single source of truth for the verdict UI — replaces scattered string
-  // comparisons spread across widgets.
 
   AuthenticityVerdict get authenticityVerdict {
     if (lowOcrQuality || aiLabel.isEmpty) return AuthenticityVerdict.unknown;
